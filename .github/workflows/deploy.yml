@@ -6,38 +6,87 @@ on:
       - main
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Deploy to DigitalOcean via SSH
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: plokitch-api/package-lock.json
+
+      - name: Run Build Check (GHA Runner Gate)
+        run: |
+          cd plokitch-api
+          npm install --legacy-peer-deps
+          npm run build
+
+      - name: Deploy to DigitalOcean & Auto-Rollback Gate
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DROPLET_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "🚀 Starting Zero-Downtime Deployment..."
+            echo "🚀 Starting Clustered Rolling Deployment..."
             cd /root/Plokitch-api || exit
             
-            # Temporarily configure token in git remote for pull authentication
+            # 1. Create backups in case of startup failures
+            rm -rf dist_bak package_bak.json package-lock_bak.json
+            if [ -d "dist" ]; then
+              cp -r dist dist_bak
+            fi
+            cp package.json package_bak.json
+            cp package-lock.json package-lock_bak.json
+            
+            # 2. Update remote URL with token for authenticated pull
             git remote set-url origin https://${{ secrets.GH_OAUTH_TOKEN }}@github.com/AbdulMaaji/Plokitch-api.git
             git fetch origin main
             git reset --hard origin/main
             git clean -fd
-            
-            # Revert remote URL back to clean HTTPS for safety
             git remote set-url origin https://github.com/AbdulMaaji/Plokitch-api.git
             
-            # Install dependencies and build project
+            # 3. Install production dependencies and compile on server
             npm install --legacy-peer-deps
             npm run build
             
-            # Graceful zero-downtime reload of PM2 process
-            pm2 reload plokitch-api --update-env || pm2 start dist/index.js --name plokitch-api
-            pm2 save
+            # 4. Trigger PM2 Cluster Reload
+            echo "🔄 Reloading PM2 Clustered Instances..."
+            pm2 reload ecosystem.config.json --update-env || pm2 start ecosystem.config.json
             
-            echo "✅ Deployment Successful!"
+            # 5. Automated Rollback Verification Gate
+            echo "🔍 Performing Post-Deployment Health Inspections..."
+            sleep 4
+            
+            # Query PM2 processes for plokitch-api that are not 'online'
+            CRASHED_PROCESSES=$(pm2 jlist | jq '.[] | select(.name=="plokitch-api") | select(.pm2_env.status != "online") | .pm_id')
+            
+            if [ -n "$CRASHED_PROCESSES" ]; then
+              echo "❌ Post-deploy health inspection failed! Crashed process IDs: $CRASHED_PROCESSES"
+              echo "⚠️ Triggering automated rollback to restore stable baseline..."
+              
+              # Restore backups
+              rm -rf dist
+              if [ -d "dist_bak" ]; then
+                cp -r dist_bak dist
+              fi
+              mv package_bak.json package.json
+              mv package-lock_bak.json package-lock.json
+              
+              # Restore stable dependencies and reload stable PM2 processes
+              npm install --legacy-peer-deps
+              pm2 reload ecosystem.config.json --update-env
+              
+              echo "✅ Rollback complete! System recovered to previous stable build."
+              exit 1
+            else
+              # Clean up temporary backups on successful deployment
+              rm -rf dist_bak package_bak.json package-lock_bak.json
+              pm2 save
+              echo "🎉 Rolling Deployment successful! Clustered instances are healthy."
+            fi
