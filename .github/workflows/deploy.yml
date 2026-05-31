@@ -25,67 +25,13 @@ jobs:
           npm install --legacy-peer-deps
           npm run build
 
-      - name: Deploy to DigitalOcean & Auto-Rollback Gate
+      - name: Trigger Remote Deployment Script & Health Gate
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.DROPLET_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            echo "🚀 Starting Clustered Rolling Deployment..."
-            cd /root/Plokitch-api || exit
-            
-            # 1. Create backups in case of startup failures
-            rm -rf dist_bak package_bak.json package-lock_bak.json
-            if [ -d "dist" ]; then
-              cp -r dist dist_bak
-            fi
-            cp package.json package_bak.json
-            cp package-lock.json package-lock_bak.json
-            
-            # 2. Update remote URL with token for authenticated pull
-            git remote set-url origin https://${{ secrets.GH_OAUTH_TOKEN }}@github.com/AbdulMaaji/Plokitch-api.git
-            git fetch origin main
-            git reset --hard origin/main
-            git clean -fd
-            git remote set-url origin https://github.com/AbdulMaaji/Plokitch-api.git
-            
-            # 3. Install production dependencies and compile on server
-            npm install --legacy-peer-deps
-            npm run build
-            
-            # 4. Trigger PM2 Cluster Reload
-            echo "🔄 Reloading PM2 Clustered Instances..."
-            pm2 reload ecosystem.config.json --update-env || pm2 start ecosystem.config.json
-            
-            # 5. Automated Rollback Verification Gate
-            echo "🔍 Performing Post-Deployment Health Inspections..."
-            sleep 4
-            
-            # Query PM2 processes for plokitch-api that are not 'online'
-            CRASHED_PROCESSES=$(pm2 jlist | jq '.[] | select(.name=="plokitch-api") | select(.pm2_env.status != "online") | .pm_id')
-            
-            if [ -n "$CRASHED_PROCESSES" ]; then
-              echo "❌ Post-deploy health inspection failed! Crashed process IDs: $CRASHED_PROCESSES"
-              echo "⚠️ Triggering automated rollback to restore stable baseline..."
-              
-              # Restore backups
-              rm -rf dist
-              if [ -d "dist_bak" ]; then
-                cp -r dist_bak dist
-              fi
-              mv package_bak.json package.json
-              mv package-lock_bak.json package-lock.json
-              
-              # Restore stable dependencies and reload stable PM2 processes
-              npm install --legacy-peer-deps
-              pm2 reload ecosystem.config.json --update-env
-              
-              echo "✅ Rollback complete! System restored to previous stable build."
-              exit 1
-            else
-              # Clean up temporary backups on successful deployment
-              rm -rf dist_bak package_bak.json package-lock_bak.json
-              pm2 save
-              echo "🎉 Rolling Deployment successful! Clustered instances are healthy."
-            fi
+            export GH_OAUTH_TOKEN="${{ secrets.GH_OAUTH_TOKEN }}"
+            cd /root/Plokitch-api
+            bash deploy.sh
