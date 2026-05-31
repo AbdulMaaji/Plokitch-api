@@ -18,11 +18,10 @@ jobs:
         with:
           node-version: 22
           cache: 'npm'
-          cache-dependency-path: plokitch-api/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Run Build Check (GHA Runner Gate)
         run: |
-          cd plokitch-api
           npm install --legacy-peer-deps
           npm run build
 
@@ -82,7 +81,7 @@ jobs:
               npm install --legacy-peer-deps
               pm2 reload ecosystem.config.json --update-env
               
-              echo "✅ Rollback complete! System recovered to previous stable build."
+              echo "✅ Rollback complete! System restored to previous stable build."
               exit 1
             else
               # Clean up temporary backups on successful deployment
