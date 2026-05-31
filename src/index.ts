@@ -122,7 +122,7 @@ fastify.setErrorHandler(errorHandler);
 // ──────────────────────────────────────────────────────────────
 fastify.get("/health", async () => ({
   status: "ok",
-  service: "plotkitch-api",
+  service: "plokitch-api",
   timestamp: new Date().toISOString(),
   env: process.env.NODE_ENV ?? "development",
 }));
