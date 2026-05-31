@@ -37,6 +37,7 @@ const fastify = Fastify({
 
 // ──────────────────────────────────────────────────────────────
 // Plugins
+// NOTE: Hardened production security: Helmet & Rate-Limiting active
 // ──────────────────────────────────────────────────────────────
 await fastify.register(fastifySensible);
 await fastify.register(fastifyHelmet, {
