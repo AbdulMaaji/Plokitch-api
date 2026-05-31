@@ -8,10 +8,6 @@ if (!process.env.BETTER_AUTH_SECRET) {
   throw new Error("BETTER_AUTH_SECRET is not set in environment variables");
 }
 
-const clientOrigins = process.env.CLIENT_ORIGIN
-  ? process.env.CLIENT_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
-  : [];
-
 export const auth = betterAuth({
   plugins: [bearer()],
   // ── Database ──────────────────────────────────────────────
@@ -33,12 +29,14 @@ export const auth = betterAuth({
 
   // ── Trusted Origins ───────────────────────────────────────
   trustedOrigins: [
-    ...clientOrigins,
+    ...(process.env.CLIENT_ORIGIN
+      ? process.env.CLIENT_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
+      : []),
     "http://localhost:5173",
     "http://localhost:3000",
     "http://localhost:8080",
     "http://localhost:8081",
-  ].filter(Boolean) as string[],
+  ],
 
   // ── Authentication Methods ────────────────────────────────
   emailAndPassword: {
