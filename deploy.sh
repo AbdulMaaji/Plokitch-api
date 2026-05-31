@@ -5,10 +5,14 @@ echo "🚀 Starting Resilient Symlinked VPS Deployment..."
 
 API_DIR="/root/Plokitch-api"
 RELEASES_DIR="${API_DIR}/releases"
+SHARED_DIR="${API_DIR}/shared"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 NEW_RELEASE="${RELEASES_DIR}/${TIMESTAMP}"
 
 mkdir -p "${RELEASES_DIR}"
+mkdir -p "${SHARED_DIR}"
+
+echo "📂 Verifying shared directory layout at: ${SHARED_DIR}"
 
 # 1. Capture the previous active release path for safety checks and rollback
 PREVIOUS_RELEASE=""
@@ -34,17 +38,17 @@ npm run build
 echo "🔗 Swapping symlink to new release..."
 ln -sfn "${NEW_RELEASE}" "${API_DIR}/current"
 
-# 6. Reload PM2 (Fork Mode) pointing to the symlink
-echo "🔄 Reloading PM2 process in Fork Mode..."
+# 6. Reload PM2 (Fork Mode) using ecosystem configuration file
+echo "🔄 Reloading PM2 process via ecosystem configuration..."
 cd "${API_DIR}"
 
-# Ensure PM2 is registered to the symlinked path in fork mode
+# Ensure PM2 is registered to the symlinked path via ecosystem file
 if pm2 describe plokitch-api >/dev/null 2>&1; then
   # If already registered, reload env and follow symlink
-  pm2 reload plokitch-api --update-env
+  pm2 reload ecosystem.config.json --update-env
 else
-  # Start fresh in Fork Mode
-  pm2 start "${API_DIR}/current/dist/index.js" --name plokitch-api
+  # Start fresh in Fork Mode using ecosystem config
+  pm2 start ecosystem.config.json
 fi
 
 # 7. HTTP Health Gate Verification Check
@@ -78,8 +82,8 @@ else
     # Swap symlink back
     ln -sfn "${PREVIOUS_RELEASE}" "${API_DIR}/current"
     
-    # Reload PM2 to run previous release
-    pm2 reload plokitch-api --update-env
+    # Reload PM2 to run previous release via ecosystem config
+    pm2 reload ecosystem.config.json --update-env
     
     echo "✅ Rollback completed! System restored to previous stable build."
   else

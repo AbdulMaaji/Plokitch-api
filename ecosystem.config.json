@@ -1,0 +1,14 @@
+{
+  "apps": [
+    {
+      "name": "plokitch-api",
+      "script": "current/dist/index.js",
+      "cwd": "/root/Plokitch-api",
+      "exec_mode": "fork",
+      "instances": 1,
+      "env": {
+        "NODE_ENV": "production"
+      }
+    }
+  ]
+}
