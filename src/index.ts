@@ -46,18 +46,45 @@ await fastify.register(fastifyCors, {
       return;
     }
 
-    const allowedOrigins = [
-      process.env.CLIENT_ORIGIN,
-      "http://localhost:3000",
-      "http://localhost:5173",
-      "http://localhost:8080",
-      "http://localhost:8081",
-    ].filter(Boolean);
+    try {
+      // Split and clean client origins from process.env.CLIENT_ORIGIN
+      const configuredOrigins = process.env.CLIENT_ORIGIN
+        ? process.env.CLIENT_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
+        : [];
 
-    const hostname = new URL(origin).hostname;
-    if (hostname === "localhost" || hostname === "127.0.0.1" || allowedOrigins.includes(origin)) {
-      cb(null, true);
-      return;
+      const allowedOrigins = [
+        ...configuredOrigins,
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5173",
+        "http://localhost:8080",
+        "http://localhost:8081",
+      ];
+
+      // Direct exact match
+      if (allowedOrigins.includes(origin)) {
+        cb(null, true);
+        return;
+      }
+
+      // Allow Vercel preview environments (*.vercel.app)
+      if (/\.vercel\.app$/i.test(origin)) {
+        cb(null, true);
+        return;
+      }
+
+      const parsedUrl = new URL(origin);
+      // Allow localhost and loopback interface connections
+      if (
+        parsedUrl.hostname === "localhost" ||
+        parsedUrl.hostname === "127.0.0.1"
+      ) {
+        cb(null, true);
+        return;
+      }
+    } catch (err) {
+      // Catch invalid URLs to prevent server crashing
+      fastify.log.error(err, "CORS origin parsing error");
     }
 
     cb(new Error("Not allowed by CORS"), false);
@@ -68,7 +95,7 @@ await fastify.register(fastifyCors, {
     "Authorization",
     "X-Requested-With",
     "Cookie",
-    "x-better-auth-session"
+    "x-better-auth-session",
   ],
   exposedHeaders: ["set-cookie"],
   credentials: true,
