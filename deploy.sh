@@ -17,13 +17,7 @@ if [ -L "${API_DIR}/current" ]; then
   echo "👉 Current active release: ${PREVIOUS_RELEASE}"
 fi
 
-# 2. Update code and get clean repo state in main branch
-echo "📦 Pulling clean codebase updates..."
-git remote set-url origin "https://${GH_OAUTH_TOKEN}@github.com/AbdulMaaji/Plokitch-api.git"
-git fetch origin main
-git reset --hard origin/main
-git clean -fd
-git remote set-url origin "https://github.com/AbdulMaaji/Plokitch-api.git"
+# 2. Codebase update is handled beforehand by GHA runner SSH pull task
 
 # 3. Create fresh release folder and copy files
 echo "📂 Creating new release version: ${TIMESTAMP}"

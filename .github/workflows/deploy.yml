@@ -34,4 +34,9 @@ jobs:
           script: |
             export GH_OAUTH_TOKEN="${{ secrets.GH_OAUTH_TOKEN }}"
             cd /root/Plokitch-api
+            git remote set-url origin "https://${GH_OAUTH_TOKEN}@github.com/AbdulMaaji/Plokitch-api.git"
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+            git remote set-url origin "https://github.com/AbdulMaaji/Plokitch-api.git"
             bash deploy.sh
