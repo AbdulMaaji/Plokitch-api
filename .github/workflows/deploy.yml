@@ -1,0 +1,43 @@
+name: Deploy API
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy to DigitalOcean via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "🚀 Starting Zero-Downtime Deployment..."
+            cd /root/Plokitch-api || exit
+            
+            # Temporarily configure token in git remote for pull authentication
+            git remote set-url origin https://${{ secrets.GH_OAUTH_TOKEN }}@github.com/AbdulMaaji/Plokitch-api.git
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
+            
+            # Revert remote URL back to clean HTTPS for safety
+            git remote set-url origin https://github.com/AbdulMaaji/Plokitch-api.git
+            
+            # Install dependencies and build project
+            npm install --legacy-peer-deps
+            npm run build
+            
+            # Graceful zero-downtime reload of PM2 process
+            pm2 reload plokitch-api --update-env || pm2 start dist/index.js --name plokitch-api
+            pm2 save
+            
+            echo "✅ Deployment Successful!"

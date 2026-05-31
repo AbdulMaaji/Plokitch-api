@@ -2,6 +2,8 @@ import "dotenv/config";
 import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifySensible from "@fastify/sensible";
+import fastifyHelmet from "@fastify/helmet";
+import fastifyRateLimit from "@fastify/rate-limit";
 
 import { authRoutes } from "./routes/auth.routes.js";
 import { userRoutes } from "./routes/users.routes.js";
@@ -37,6 +39,14 @@ const fastify = Fastify({
 // Plugins
 // ──────────────────────────────────────────────────────────────
 await fastify.register(fastifySensible);
+await fastify.register(fastifyHelmet, {
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+});
+await fastify.register(fastifyRateLimit, {
+  max: 120,
+  timeWindow: "1 minute",
+});
 
 await fastify.register(fastifyCors, {
   origin: (origin, cb) => {
