@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/index.js";
 import crypto from "crypto";
 import { user, vendor, order, invite } from "../db/schema.js";
-import { eq, count, sql } from "drizzle-orm";
+import { eq, count, sql, and, isNull, gt } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
 
 /**
@@ -116,6 +116,27 @@ export async function adminRoutes(fastify: FastifyInstance) {
         });
       }
 
+      // Check if an active, unused, unexpired invite already exists
+      const activeInvite = await db.query.invite.findFirst({
+        where: and(
+          eq(invite.email, body.email.toLowerCase()),
+          isNull(invite.usedAt),
+          gt(invite.expiresAt, new Date())
+        )
+      });
+
+      if (activeInvite) {
+        const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
+        const inviteLink = `${marketplaceUrl}/accept-invite?token=${activeInvite.token}`;
+
+        return reply.status(200).send({
+          success: true,
+          inviteLink,
+          expiresAt: activeInvite.expiresAt.toISOString(),
+          reused: true,
+        });
+      }
+
       const token = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
 
@@ -161,6 +182,27 @@ export async function adminRoutes(fastify: FastifyInstance) {
           success: false,
           error: "A user with this email address already exists",
           code: "CONFLICT",
+        });
+      }
+
+      // Check if an active, unused, unexpired invite already exists
+      const activeInvite = await db.query.invite.findFirst({
+        where: and(
+          eq(invite.email, body.email.toLowerCase()),
+          isNull(invite.usedAt),
+          gt(invite.expiresAt, new Date())
+        )
+      });
+
+      if (activeInvite) {
+        const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
+        const inviteLink = `${marketplaceUrl}/accept-invite?token=${activeInvite.token}`;
+
+        return reply.status(200).send({
+          success: true,
+          inviteLink,
+          expiresAt: activeInvite.expiresAt.toISOString(),
+          reused: true,
         });
       }
 

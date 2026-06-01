@@ -3,7 +3,7 @@ import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../lib/auth.js";
 import { db } from "../db/index.js";
 import { eq } from "drizzle-orm";
-import { invite, vendor, riderProfile } from "../db/schema.js";
+import { invite, vendor, riderProfile, user } from "../db/schema.js";
 
 const COOKIE_DOMAIN =
   process.env.NODE_ENV === "production" ? ".plokitch.app" : undefined;
@@ -104,6 +104,12 @@ export async function authRoutes(fastify: FastifyInstance) {
       const bodyText = await response.text();
       const userPayload = JSON.parse(bodyText || "{}");
       const userId = userPayload.user.id;
+
+      // Update the user record securely in the database to override standard "customer" default
+      await db
+        .update(user)
+        .set({ role: inviteRecord.role as "chef" | "rider" })
+        .where(eq(user.id, userId));
 
       // 3. Atomically initialize the operator's operational profile
       if (inviteRecord.role === "chef") {
