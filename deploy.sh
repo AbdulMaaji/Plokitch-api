@@ -26,7 +26,7 @@ fi
 # 3. Create fresh release folder and copy files
 echo "📂 Creating new release version: ${TIMESTAMP}"
 mkdir -p "${NEW_RELEASE}"
-rsync -a --exclude='.git' --exclude='node_modules' --exclude='dist' "${API_DIR}/" "${NEW_RELEASE}/"
+rsync -a --exclude='.git' --exclude='node_modules' --exclude='dist' --exclude='releases' --exclude='shared' --exclude='current' "${API_DIR}/" "${NEW_RELEASE}/"
 
 # 4. Install production dependencies and compile inside the release folder
 echo "🔨 Compiling dependencies in isolated release directory..."
