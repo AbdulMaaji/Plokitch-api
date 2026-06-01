@@ -1,6 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../lib/auth.js";
+import { db } from "../db/index.js";
+import { eq } from "drizzle-orm";
+import { invite, vendor, riderProfile } from "../db/schema.js";
 
 const COOKIE_DOMAIN =
   process.env.NODE_ENV === "production" ? ".plokitch.app" : undefined;
@@ -22,6 +25,138 @@ function patchCookieDomain(cookieValue: string): string {
  * All /api/auth/* requests are forwarded to Better Auth.
  */
 export async function authRoutes(fastify: FastifyInstance) {
+  // POST /api/auth/accept-invite — Accept operator invitation and setup credentials
+  fastify.post("/api/auth/accept-invite", async (request, reply) => {
+    const { token, name, password } = request.body as {
+      token?: string;
+      name?: string;
+      password?: string;
+    };
+
+    if (!token || !name || !password) {
+      return reply.status(400).send({
+        success: false,
+        error: "Token, name, and password are required fields",
+      });
+    }
+
+    if (password.length < 8) {
+      return reply.status(400).send({
+        success: false,
+        error: "Password must be at least 8 characters long",
+      });
+    }
+
+    try {
+      // 1. Retrieve and validate the invitation token
+      const inviteRecord = await db.query.invite.findFirst({
+        where: eq(invite.token, token),
+      });
+
+      if (!inviteRecord) {
+        return reply.status(404).send({
+          success: false,
+          error: "Invitation not found. Please ask the administrator for a new link.",
+        });
+      }
+
+      if (inviteRecord.usedAt) {
+        return reply.status(400).send({
+          success: false,
+          error: "This invitation link has already been used.",
+        });
+      }
+
+      if (inviteRecord.expiresAt < new Date()) {
+        return reply.status(400).send({
+          success: false,
+          error: "This invitation link has expired. Please ask the administrator for a new one.",
+        });
+      }
+
+      // 2. Delegate secure user registration directly to Better Auth's standard sign-up flow
+      const signupReq = new Request(
+        `${request.protocol}://${request.headers.host}/api/auth/sign-up/email`,
+        {
+          method: "POST",
+          headers: new Headers({ "Content-Type": "application/json" }),
+          body: JSON.stringify({
+            email: inviteRecord.email,
+            password,
+            name,
+            role: inviteRecord.role, // "chef" or "rider"
+          }),
+        }
+      );
+
+      const response = await auth.handler(signupReq);
+
+      if (response.status >= 400) {
+        const bodyText = await response.text();
+        const errJson = JSON.parse(bodyText || "{}");
+        return reply.status(response.status).send({
+          success: false,
+          error: errJson.error || errJson.message || "Failed to create user credentials",
+        });
+      }
+
+      // Parse successfully registered user
+      const bodyText = await response.text();
+      const userPayload = JSON.parse(bodyText || "{}");
+      const userId = userPayload.user.id;
+
+      // 3. Atomically initialize the operator's operational profile
+      if (inviteRecord.role === "chef") {
+        const slug = name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/(^-|-$)/g, "");
+
+        await db.insert(vendor).values({
+          userId,
+          businessName: `${name}'s Kitchen`,
+          slug,
+          isActive: false,
+          isVerified: false,
+        });
+      } else if (inviteRecord.role === "rider") {
+        await db.insert(riderProfile).values({
+          userId,
+          isAvailable: false,
+          isVerified: false,
+        });
+      }
+
+      // 4. Mark invite as used
+      await db
+        .update(invite)
+        .set({ usedAt: new Date() })
+        .where(eq(invite.id, inviteRecord.id));
+
+      // 5. Transfer native Better Auth authentication headers and cookies back to the response
+      reply.status(200);
+      response.headers.forEach((value: string, key: string) => {
+        if (key.toLowerCase() === "set-cookie") {
+          reply.header(key, patchCookieDomain(value));
+        } else {
+          reply.header(key, value);
+        }
+      });
+
+      return reply.send({
+        success: true,
+        role: inviteRecord.role,
+        redirectTo: inviteRecord.role === "chef" ? "/vendor/dashboard" : "/rider/dashboard",
+      });
+    } catch (err: any) {
+      fastify.log.error(err, "CRITICAL Accept invite processing error");
+      return reply.status(500).send({
+        success: false,
+        error: err.message || "An unexpected error occurred while processing invitation",
+      });
+    }
+  });
+
   fastify.route({
     method: ["GET", "POST"],
     url: "/api/auth/*",
