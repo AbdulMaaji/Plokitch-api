@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/index.js";
-import { user, vendor, order } from "../db/schema.js";
+import crypto from "crypto";
+import { user, vendor, order, invite } from "../db/schema.js";
 import { eq, count, sql } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
 
@@ -88,6 +89,102 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
 
       return reply.send({ success: true, data: updated });
+    }
+  );
+
+  // POST /api/admin/vendors/invite — invite a vendor
+  fastify.post(
+    "/api/admin/vendors/invite",
+    { preHandler: [requireAuth, requireRole("admin")] },
+    async (request, reply) => {
+      const body = request.body as { email: string };
+
+      if (!body.email) {
+        return reply.status(400).send({ success: false, error: "Email is required" });
+      }
+
+      // Check if user already exists
+      const existingUser = await db.query.user.findFirst({
+        where: eq(user.email, body.email.toLowerCase()),
+      });
+
+      if (existingUser) {
+        return reply.status(409).send({
+          success: false,
+          error: "A user with this email address already exists",
+          code: "CONFLICT",
+        });
+      }
+
+      const token = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+
+      const [newInvite] = await db
+        .insert(invite)
+        .values({
+          email: body.email.toLowerCase(),
+          role: "chef", // Chef is the backend role mapping for Vendor
+          token,
+          expiresAt,
+        })
+        .returning();
+
+      const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
+      const inviteLink = `${marketplaceUrl}/accept-invite?token=${token}`;
+
+      return reply.status(201).send({
+        success: true,
+        inviteLink,
+        expiresAt: expiresAt.toISOString(),
+      });
+    }
+  );
+
+  // POST /api/admin/riders/invite — invite a rider
+  fastify.post(
+    "/api/admin/riders/invite",
+    { preHandler: [requireAuth, requireRole("admin")] },
+    async (request, reply) => {
+      const body = request.body as { email: string };
+
+      if (!body.email) {
+        return reply.status(400).send({ success: false, error: "Email is required" });
+      }
+
+      // Check if user already exists
+      const existingUser = await db.query.user.findFirst({
+        where: eq(user.email, body.email.toLowerCase()),
+      });
+
+      if (existingUser) {
+        return reply.status(409).send({
+          success: false,
+          error: "A user with this email address already exists",
+          code: "CONFLICT",
+        });
+      }
+
+      const token = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+
+      const [newInvite] = await db
+        .insert(invite)
+        .values({
+          email: body.email.toLowerCase(),
+          role: "rider",
+          token,
+          expiresAt,
+        })
+        .returning();
+
+      const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
+      const inviteLink = `${marketplaceUrl}/accept-invite?token=${token}`;
+
+      return reply.status(201).send({
+        success: true,
+        inviteLink,
+        expiresAt: expiresAt.toISOString(),
+      });
     }
   );
 }
