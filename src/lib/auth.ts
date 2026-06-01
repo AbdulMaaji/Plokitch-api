@@ -92,6 +92,12 @@ export const auth = betterAuth({
   advanced: {
     useSecureCookies: process.env.NODE_ENV === "production",
     cookiePrefix: "plotkitch",
+    // Share session cookie across all *.plokitch.app subdomains so that
+    // dashboard.plokitch.app middleware can read the cookie set by api.plokitch.app
+    crossSubdomainCookies: {
+      enabled: process.env.NODE_ENV === "production",
+      domain: "plokitch.app",
+    },
   },
 });
 
