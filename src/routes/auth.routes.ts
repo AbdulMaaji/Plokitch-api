@@ -2,6 +2,21 @@ import type { FastifyInstance } from "fastify";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../lib/auth.js";
 
+const COOKIE_DOMAIN =
+  process.env.NODE_ENV === "production" ? ".plokitch.app" : undefined;
+
+/**
+ * Rewrites a Set-Cookie header value to inject Domain=.plokitch.app in
+ * production, so the session cookie is shared across all *.plokitch.app
+ * subdomains (e.g. dashboard.plokitch.app can read api.plokitch.app cookies).
+ */
+function patchCookieDomain(cookieValue: string): string {
+  if (!COOKIE_DOMAIN) return cookieValue;
+  // Only add Domain if it isn't already set
+  if (/;\s*Domain=/i.test(cookieValue)) return cookieValue;
+  return `${cookieValue}; Domain=${COOKIE_DOMAIN}`;
+}
+
 /**
  * Auth routes — Better Auth handler catch-all.
  * All /api/auth/* requests are forwarded to Better Auth.
@@ -32,8 +47,14 @@ export async function authRoutes(fastify: FastifyInstance) {
         const response = await auth.handler(req);
 
         reply.status(response.status);
+
         response.headers.forEach((value: string, key: string) => {
-          reply.header(key, value);
+          if (key.toLowerCase() === "set-cookie") {
+            // Patch domain so cookies are visible across *.plokitch.app
+            reply.header(key, patchCookieDomain(value));
+          } else {
+            reply.header(key, value);
+          }
         });
 
         const body = await response.text();
