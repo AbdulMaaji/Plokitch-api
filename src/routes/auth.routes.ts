@@ -3,7 +3,8 @@ import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../lib/auth.js";
 import { db } from "../db/index.js";
 import { eq } from "drizzle-orm";
-import { invite, vendor, riderProfile, user } from "../db/schema.js";
+import { invite, vendor, riderProfile, user, session as sessionSchema } from "../db/schema.js";
+import { randomUUID } from "crypto";
 
 const COOKIE_DOMAIN =
   process.env.NODE_ENV === "production" ? ".plokitch.app" : undefined;
@@ -139,16 +140,31 @@ export async function authRoutes(fastify: FastifyInstance) {
         .set({ usedAt: new Date() })
         .where(eq(invite.id, inviteRecord.id));
 
-      // 5. Transfer native Better Auth authentication headers and cookies back to the response
-      reply.status(200);
-      response.headers.forEach((value: string, key: string) => {
-        if (key.toLowerCase() === "set-cookie") {
-          reply.header(key, patchCookieDomain(value));
-        } else {
-          reply.header(key, value);
-        }
+      // 5. Programmatically create and persist a new Better Auth session directly in the database
+      const sessionId = randomUUID();
+      const sessionToken = randomUUID().replace(/-/g, "");
+      const sessionExpires = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7); // 7 days
+
+      await db.insert(sessionSchema).values({
+        id: sessionId,
+        token: sessionToken,
+        userId,
+        expiresAt: sessionExpires,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        userAgent: request.headers["user-agent"],
+        ipAddress: request.ip,
       });
 
+      // 6. Set the authentication cookie on the reply
+      const isProd = process.env.NODE_ENV === "production";
+      const domainAttr = isProd ? "; Domain=.plokitch.app" : "";
+      const secureAttr = isProd ? "; Secure" : "";
+      
+      const cookieValue = `plotkitch.session_token=${sessionToken}; Path=/; Expires=${sessionExpires.toUTCString()}; HttpOnly; SameSite=Lax${domainAttr}${secureAttr}`;
+      reply.header("Set-Cookie", cookieValue);
+
+      reply.status(200);
       return reply.send({
         success: true,
         role: inviteRecord.role,
