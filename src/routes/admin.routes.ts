@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { user, vendor, order, invite } from "../db/schema.js";
 import { eq, count, sql, and, isNull, gt } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
+import { sendInviteEmail } from "../lib/email.js";
 
 /**
  * Admin routes — /api/admin
@@ -129,6 +130,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
         const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
         const inviteLink = `${marketplaceUrl}/accept-invite?token=${activeInvite.token}`;
 
+        // Attempt to email the invitation safely
+        try {
+          await sendInviteEmail({
+            email: body.email.toLowerCase(),
+            role: "vendor",
+            inviteLink,
+            expiresAt: activeInvite.expiresAt,
+          });
+        } catch (emailErr) {
+          console.error("Failed to dispatch active invite email:", emailErr);
+        }
+
         return reply.status(200).send({
           success: true,
           inviteLink,
@@ -152,6 +165,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
       const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
       const inviteLink = `${marketplaceUrl}/accept-invite?token=${token}`;
+
+      // Attempt to email the invitation safely
+      try {
+        await sendInviteEmail({
+          email: body.email.toLowerCase(),
+          role: "vendor",
+          inviteLink,
+          expiresAt,
+        });
+      } catch (emailErr) {
+        console.error("Failed to dispatch new invite email:", emailErr);
+      }
 
       return reply.status(201).send({
         success: true,
@@ -198,6 +223,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
         const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
         const inviteLink = `${marketplaceUrl}/accept-invite?token=${activeInvite.token}`;
 
+        // Attempt to email the invitation safely
+        try {
+          await sendInviteEmail({
+            email: body.email.toLowerCase(),
+            role: "rider",
+            inviteLink,
+            expiresAt: activeInvite.expiresAt,
+          });
+        } catch (emailErr) {
+          console.error("Failed to dispatch active invite email:", emailErr);
+        }
+
         return reply.status(200).send({
           success: true,
           inviteLink,
@@ -221,6 +258,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
       const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
       const inviteLink = `${marketplaceUrl}/accept-invite?token=${token}`;
+
+      // Attempt to email the invitation safely
+      try {
+        await sendInviteEmail({
+          email: body.email.toLowerCase(),
+          role: "rider",
+          inviteLink,
+          expiresAt,
+        });
+      } catch (emailErr) {
+        console.error("Failed to dispatch new invite email:", emailErr);
+      }
 
       return reply.status(201).send({
         success: true,

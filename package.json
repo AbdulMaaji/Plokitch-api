@@ -26,6 +26,7 @@
     "fastify": "^4.28.1",
     "pg": "^8.14.1",
     "postgres": "^3.4.5",
+    "resend": "^6.12.4",
     "zod": "^3.25.76"
   },
   "devDependencies": {
