@@ -93,189 +93,200 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   );
 
-  // POST /api/admin/vendors/invite — invite a vendor
+  // Helper function to create/reuse plain-token invites cleanly
+  async function createInviteHelper(email: string, role: "chef" | "rider") {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Check if user already exists
+    const existingUser = await db.query.user.findFirst({
+      where: eq(user.email, normalizedEmail),
+    });
+
+    if (existingUser) {
+      throw { status: 409, error: "A user with this email address already exists", code: "CONFLICT" };
+    }
+
+    // Check if an active, unused, unexpired invite already exists
+    const activeInvite = await db.query.invite.findFirst({
+      where: and(
+        eq(invite.email, normalizedEmail),
+        eq(invite.status, "active"),
+        isNull(invite.usedAt),
+        gt(invite.expiresAt, new Date())
+      )
+    });
+
+    const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
+
+    if (activeInvite) {
+      const inviteLink = `${marketplaceUrl}/accept-invite?token=${activeInvite.token}`;
+
+      try {
+        await sendInviteEmail({
+          email: normalizedEmail,
+          role: role === "chef" ? "vendor" : "rider",
+          inviteLink,
+          expiresAt: activeInvite.expiresAt,
+        });
+      } catch (emailErr) {
+        console.error("Failed to dispatch active invite email:", emailErr);
+      }
+
+      return {
+        success: true,
+        inviteLink,
+        expiresAt: activeInvite.expiresAt.toISOString(),
+        reused: true,
+      };
+    }
+
+    // Generate plain cryptographically secure hex token
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    await db.insert(invite).values({
+      email: normalizedEmail,
+      role,
+      token,
+      status: "active",
+      expiresAt,
+    });
+
+    const inviteLink = `${marketplaceUrl}/accept-invite?token=${token}`;
+
+    try {
+      await sendInviteEmail({
+        email: normalizedEmail,
+        role: role === "chef" ? "vendor" : "rider",
+        inviteLink,
+        expiresAt,
+      });
+    } catch (emailErr) {
+      console.error("Failed to dispatch new invite email:", emailErr);
+    }
+
+    return {
+      success: true,
+      inviteLink,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  // POST /api/admin/vendors/invite — legacy vendor invite wrapper
   fastify.post(
     "/api/admin/vendors/invite",
     { preHandler: [requireAuth, requireRole("admin")] },
     async (request, reply) => {
       const body = request.body as { email: string };
-
       if (!body.email) {
         return reply.status(400).send({ success: false, error: "Email is required" });
       }
-
-      // Check if user already exists
-      const existingUser = await db.query.user.findFirst({
-        where: eq(user.email, body.email.toLowerCase()),
-      });
-
-      if (existingUser) {
-        return reply.status(409).send({
-          success: false,
-          error: "A user with this email address already exists",
-          code: "CONFLICT",
-        });
-      }
-
-      // Check if an active, unused, unexpired invite already exists
-      const activeInvite = await db.query.invite.findFirst({
-        where: and(
-          eq(invite.email, body.email.toLowerCase()),
-          isNull(invite.usedAt),
-          gt(invite.expiresAt, new Date())
-        )
-      });
-
-      if (activeInvite) {
-        const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
-        const inviteLink = `${marketplaceUrl}/accept-invite?token=${activeInvite.token}`;
-
-        // Attempt to email the invitation safely
-        try {
-          await sendInviteEmail({
-            email: body.email.toLowerCase(),
-            role: "vendor",
-            inviteLink,
-            expiresAt: activeInvite.expiresAt,
-          });
-        } catch (emailErr) {
-          console.error("Failed to dispatch active invite email:", emailErr);
-        }
-
-        return reply.status(200).send({
-          success: true,
-          inviteLink,
-          expiresAt: activeInvite.expiresAt.toISOString(),
-          reused: true,
-        });
-      }
-
-      const token = crypto.randomUUID();
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-
-      const [newInvite] = await db
-        .insert(invite)
-        .values({
-          email: body.email.toLowerCase(),
-          role: "chef", // Chef is the backend role mapping for Vendor
-          token,
-          expiresAt,
-        })
-        .returning();
-
-      const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
-      const inviteLink = `${marketplaceUrl}/accept-invite?token=${token}`;
-
-      // Attempt to email the invitation safely
       try {
-        await sendInviteEmail({
-          email: body.email.toLowerCase(),
-          role: "vendor",
-          inviteLink,
-          expiresAt,
-        });
-      } catch (emailErr) {
-        console.error("Failed to dispatch new invite email:", emailErr);
+        const result = await createInviteHelper(body.email, "chef");
+        return reply.status(result.reused ? 200 : 201).send(result);
+      } catch (err: any) {
+        if (err.status) return reply.status(err.status).send({ success: false, error: err.error, code: err.code });
+        return reply.status(500).send({ success: false, error: err.message || "Internal server error" });
       }
-
-      return reply.status(201).send({
-        success: true,
-        inviteLink,
-        expiresAt: expiresAt.toISOString(),
-      });
     }
   );
 
-  // POST /api/admin/riders/invite — invite a rider
+  // POST /api/admin/riders/invite — legacy rider invite wrapper
   fastify.post(
     "/api/admin/riders/invite",
     { preHandler: [requireAuth, requireRole("admin")] },
     async (request, reply) => {
       const body = request.body as { email: string };
-
       if (!body.email) {
         return reply.status(400).send({ success: false, error: "Email is required" });
       }
-
-      // Check if user already exists
-      const existingUser = await db.query.user.findFirst({
-        where: eq(user.email, body.email.toLowerCase()),
-      });
-
-      if (existingUser) {
-        return reply.status(409).send({
-          success: false,
-          error: "A user with this email address already exists",
-          code: "CONFLICT",
-        });
-      }
-
-      // Check if an active, unused, unexpired invite already exists
-      const activeInvite = await db.query.invite.findFirst({
-        where: and(
-          eq(invite.email, body.email.toLowerCase()),
-          isNull(invite.usedAt),
-          gt(invite.expiresAt, new Date())
-        )
-      });
-
-      if (activeInvite) {
-        const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
-        const inviteLink = `${marketplaceUrl}/accept-invite?token=${activeInvite.token}`;
-
-        // Attempt to email the invitation safely
-        try {
-          await sendInviteEmail({
-            email: body.email.toLowerCase(),
-            role: "rider",
-            inviteLink,
-            expiresAt: activeInvite.expiresAt,
-          });
-        } catch (emailErr) {
-          console.error("Failed to dispatch active invite email:", emailErr);
-        }
-
-        return reply.status(200).send({
-          success: true,
-          inviteLink,
-          expiresAt: activeInvite.expiresAt.toISOString(),
-          reused: true,
-        });
-      }
-
-      const token = crypto.randomUUID();
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-
-      const [newInvite] = await db
-        .insert(invite)
-        .values({
-          email: body.email.toLowerCase(),
-          role: "rider",
-          token,
-          expiresAt,
-        })
-        .returning();
-
-      const marketplaceUrl = process.env.MARKETPLACE_URL ?? "http://localhost:5173";
-      const inviteLink = `${marketplaceUrl}/accept-invite?token=${token}`;
-
-      // Attempt to email the invitation safely
       try {
-        await sendInviteEmail({
-          email: body.email.toLowerCase(),
-          role: "rider",
-          inviteLink,
-          expiresAt,
-        });
-      } catch (emailErr) {
-        console.error("Failed to dispatch new invite email:", emailErr);
+        const result = await createInviteHelper(body.email, "rider");
+        return reply.status(result.reused ? 200 : 201).send(result);
+      } catch (err: any) {
+        if (err.status) return reply.status(err.status).send({ success: false, error: err.error, code: err.code });
+        return reply.status(500).send({ success: false, error: err.message || "Internal server error" });
+      }
+    }
+  );
+
+  // GET /api/admin/invites — list all invites & dynamic computed stats
+  fastify.get(
+    "/api/admin/invites",
+    { preHandler: [requireAuth, requireRole("admin")] },
+    async (request, reply) => {
+      const invitesList = await db.query.invite.findMany();
+      invitesList.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+      const now = new Date();
+      let total = 0;
+      let active = 0;
+      let used = 0;
+      let expired = 0;
+      let revoked = 0;
+
+      for (const item of invitesList) {
+        total++;
+        if (item.status === "used") {
+          used++;
+        } else if (item.status === "revoked") {
+          revoked++;
+        } else if (item.expiresAt < now) {
+          expired++;
+        } else {
+          active++;
+        }
       }
 
-      return reply.status(201).send({
+      return reply.send({
         success: true,
-        inviteLink,
-        expiresAt: expiresAt.toISOString(),
+        data: {
+          invites: invitesList,
+          stats: { total, active, used, expired, revoked },
+        },
       });
+    }
+  );
+
+  // POST /api/admin/invites — unified create endpoint
+  fastify.post(
+    "/api/admin/invites",
+    { preHandler: [requireAuth, requireRole("admin")] },
+    async (request, reply) => {
+      const body = request.body as { email: string; role: "chef" | "rider" };
+      if (!body.email || !body.role) {
+        return reply.status(400).send({ success: false, error: "Email and role are required fields" });
+      }
+      if (body.role !== "chef" && body.role !== "rider") {
+        return reply.status(400).send({ success: false, error: "Role must be chef or rider" });
+      }
+
+      try {
+        const result = await createInviteHelper(body.email, body.role);
+        return reply.status(result.reused ? 200 : 201).send(result);
+      } catch (err: any) {
+        if (err.status) return reply.status(err.status).send({ success: false, error: err.error, code: err.code });
+        return reply.status(500).send({ success: false, error: err.message || "Internal server error" });
+      }
+    }
+  );
+
+  // POST /api/admin/invites/:id/revoke — revoke an invitation link
+  fastify.post(
+    "/api/admin/invites/:id/revoke",
+    { preHandler: [requireAuth, requireRole("admin")] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!id) {
+        return reply.status(400).send({ success: false, error: "Invite ID is required" });
+      }
+
+      await db
+        .update(invite)
+        .set({ status: "revoked" })
+        .where(eq(invite.id, id));
+
+      return reply.send({ success: true, message: "Invitation successfully revoked" });
     }
   );
 }

@@ -115,6 +115,7 @@ export const invite = pgTable("invite", {
   email: text("email").notNull(),
   role: text("role").notNull(),
   token: text("token").notNull().unique(),
+  status: text("status").notNull().default("active"),
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
