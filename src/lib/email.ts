@@ -4,7 +4,7 @@ import { Resend } from "resend";
 const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
 const fromEmail = process.env.EMAIL_FROM || "Plokitch Onboarding <onboarding@resend.dev>";
-const replyToEmail = process.env.EMAIL_REPLY_TO || "[EMAIL_ADDRESS]";
+const replyToEmail = process.env.EMAIL_REPLY_TO || "support@plokitch.app";
 
 interface SendInviteEmailParams {
   email: string;
