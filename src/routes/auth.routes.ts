@@ -61,14 +61,21 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
       }
 
-      if (inviteRecord.usedAt) {
+      if (inviteRecord.status === "revoked") {
+        return reply.status(400).send({
+          success: false,
+          error: "This invitation link has been revoked by administration.",
+        });
+      }
+
+      if (inviteRecord.status === "used" || inviteRecord.usedAt) {
         return reply.status(400).send({
           success: false,
           error: "This invitation link has already been used.",
         });
       }
 
-      if (inviteRecord.expiresAt < new Date()) {
+      if (inviteRecord.status === "expired" || inviteRecord.expiresAt < new Date()) {
         return reply.status(400).send({
           success: false,
           error: "This invitation link has expired. Please ask the administrator for a new one.",
@@ -137,7 +144,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       // 4. Mark invite as used
       await db
         .update(invite)
-        .set({ usedAt: new Date() })
+        .set({ status: "used", usedAt: new Date() })
         .where(eq(invite.id, inviteRecord.id));
 
       // 5. Programmatically create and persist a new Better Auth session directly in the database
@@ -177,6 +184,30 @@ export async function authRoutes(fastify: FastifyInstance) {
         error: err.message || "An unexpected error occurred while processing invitation",
       });
     }
+  });
+
+  // GET /api/auth/verify-invite — verify token on mount
+  fastify.get("/api/auth/verify-invite", async (request, reply) => {
+    const { token } = request.query as { token?: string };
+    if (!token) {
+      return reply.status(400).send({ success: false, error: "Token is required" });
+    }
+    const inviteRecord = await db.query.invite.findFirst({
+      where: eq(invite.token, token),
+    });
+    if (!inviteRecord) {
+      return reply.status(404).send({ success: false, error: "Invitation not found" });
+    }
+    if (inviteRecord.status === "revoked") {
+      return reply.status(400).send({ success: false, error: "This invitation link has been revoked by administration.", code: "REVOKED" });
+    }
+    if (inviteRecord.status === "used" || inviteRecord.usedAt) {
+      return reply.status(400).send({ success: false, error: "This invitation link has already been used.", code: "USED" });
+    }
+    if (inviteRecord.status === "expired" || inviteRecord.expiresAt < new Date()) {
+      return reply.status(400).send({ success: false, error: "This invitation link has expired. Please ask the administrator for a new one.", code: "EXPIRED" });
+    }
+    return reply.send({ success: true, email: inviteRecord.email, role: inviteRecord.role });
   });
 
   fastify.route({
