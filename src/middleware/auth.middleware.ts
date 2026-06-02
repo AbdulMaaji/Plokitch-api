@@ -19,6 +19,23 @@ export async function requireAuth(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
+  // Check for internal secret key
+  const internalSecret = request.headers["x-internal-secret"];
+  if (internalSecret && internalSecret === process.env.INTERNAL_API_SECRET) {
+    (request as any).session = {
+      user: {
+        id: "internal-admin",
+        role: "admin",
+        email: "admin@plokitch.app",
+        name: "Internal Admin Proxy",
+      },
+      session: {
+        id: "internal-session",
+      }
+    };
+    return;
+  }
+
   const session = await getSession(request);
   if (!session) {
     return reply.status(401).send({
