@@ -221,7 +221,32 @@ export async function vendorRoutes(fastify: FastifyInstance) {
         });
       }
 
-      let updateData = { ...(body as any), updatedAt: new Date() };
+      const allowedFields = [
+        "businessName",
+        "description",
+        "cuisineType",
+        "specialty",
+        "tag",
+        "imageUrl",
+        "bannerUrl",
+        "location",
+        "deliveryTime",
+        "minOrder",
+        "isActive",
+      ];
+
+      if (isAdmin) {
+        allowedFields.push("isVerified", "commissionRate", "rating");
+      }
+
+      const updateData: Record<string, any> = {};
+      for (const field of allowedFields) {
+        if ((body as any)[field] !== undefined) {
+          updateData[field] = (body as any)[field];
+        }
+      }
+
+      updateData.updatedAt = new Date();
       
       if (body.businessName) {
         updateData.slug = body.businessName
