@@ -5,7 +5,7 @@ import { db } from "../db/index.js";
 import { eq } from "drizzle-orm";
 import { invite, vendor, riderProfile, user, session as sessionSchema } from "../db/schema.js";
 import { randomUUID } from "crypto";
-import { sendCredentialsEmail } from "../lib/email.js";
+import { sendCredentialsEmail, sendGeneralWelcomeEmail } from "../lib/email.js";
 
 const COOKIE_DOMAIN =
   process.env.NODE_ENV === "production" ? ".plokitch.app" : undefined;
@@ -261,29 +261,44 @@ export async function authRoutes(fastify: FastifyInstance) {
           const name = reqBody?.name;
           const password = reqBody?.password;
 
-          if (email && (role === "chef" || role === "rider")) {
+          if (email) {
             // Find the newly created user in the database
             const dbUser = await db.query.user.findFirst({
               where: eq(user.email, email),
             });
 
             if (dbUser) {
-              // 1. Force update user's role since Better Auth defaults to customer
-              await db
-                .update(user)
-                .set({ role })
-                .where(eq(user.id, dbUser.id));
+              const actualRole = role || dbUser.role || "customer";
 
-              // 2. Send welcome email containing their temporary password
+              if (role === "chef" || role === "rider") {
+                // 1. Force update user's role since Better Auth defaults to customer
+                await db
+                  .update(user)
+                  .set({ role })
+                  .where(eq(user.id, dbUser.id));
+
+                // 2. Send credentials welcome email containing their temporary password
+                try {
+                  await sendCredentialsEmail({
+                    email,
+                    name: name || dbUser.name || "Partner",
+                    role,
+                    tempPassword: password,
+                  });
+                } catch (emailErr) {
+                  fastify.log.error(emailErr, "Failed to send credentials welcome email");
+                }
+              }
+
+              // 3. Send general onboarding welcome email to all users
               try {
-                await sendCredentialsEmail({
+                await sendGeneralWelcomeEmail({
                   email,
-                  name: name || dbUser.name || "Partner",
-                  role,
-                  tempPassword: password,
+                  name: name || dbUser.name || "User",
+                  role: actualRole,
                 });
               } catch (emailErr) {
-                fastify.log.error(emailErr, "Failed to send credentials welcome email");
+                fastify.log.error(emailErr, "Failed to send general onboarding welcome email");
               }
             }
           }
