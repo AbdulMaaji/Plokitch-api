@@ -194,3 +194,198 @@ export async function sendInviteEmail({ email, role, inviteLink, expiresAt }: Se
     return { mock: true, success: true };
   }
 }
+
+export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string }) {
+  if (resend) {
+    console.log(`[Email] Sending Resend email to ${to}...`);
+    try {
+      const response = await resend.emails.send({
+        from: fromEmail,
+        to,
+        replyTo: replyToEmail,
+        subject,
+        html,
+      });
+      console.log(`[Email] Resend dispatch success:`, response);
+      return response;
+    } catch (error) {
+      console.error(`[Email] Resend dispatch error:`, error);
+      throw error;
+    }
+  } else {
+    console.log("┌────────────────────────────────────────────────────────────┐");
+    console.log("│ 📢 DEVELOPER NOTICE: RESEND_API_KEY NOT CONFIGURED         │");
+    console.log(`│ Email simulated for: ${to}                                 │`);
+    console.log(`│ Subject: ${subject}                                        │`);
+    console.log("└────────────────────────────────────────────────────────────┘");
+    return { mock: true, success: true };
+  }
+}
+
+interface SendCredentialsEmailParams {
+  email: string;
+  name: string;
+  role: "chef" | "rider";
+  tempPassword?: string;
+}
+
+export async function sendCredentialsEmail({ email, name, role, tempPassword }: SendCredentialsEmailParams) {
+  const roleName = role === "chef" ? "Partner Chef / Vendor" : "Delivery Partner / Rider";
+  const dashboardUrl = role === "chef" ? "https://plokitch.app/login" : "https://plokitch.app/login";
+  const tempPass = tempPassword || "Plokitch@2026!";
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Welcome to Plokitch</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #0A0D14;
+            color: #E2E8F0;
+            margin: 0;
+            padding: 0;
+          }
+          .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #121620;
+            border-radius: 24px;
+            overflow: hidden;
+            border: 1px solid rgba(212, 175, 55, 0.15);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+          }
+          .header {
+            background-color: rgba(212, 175, 55, 0.05);
+            padding: 40px 30px;
+            text-align: center;
+            border-bottom: 1px solid rgba(212, 175, 55, 0.1);
+          }
+          .logo {
+            font-size: 28px;
+            font-weight: 800;
+            color: #D4AF37;
+            text-decoration: none;
+          }
+          .content {
+            padding: 40px 30px;
+          }
+          h1 {
+            font-size: 24px;
+            font-weight: 700;
+            color: #FFFFFF;
+            margin-top: 0;
+            text-align: center;
+          }
+          p {
+            font-size: 15px;
+            line-height: 1.6;
+            color: #94A3B8;
+          }
+          .credentials-box {
+            background-color: rgba(255, 255, 255, 0.03);
+            border-left: 3px solid #D4AF37;
+            padding: 20px;
+            border-radius: 0 12px 12px 0;
+            margin: 25px 0;
+          }
+          .label {
+            font-size: 11px;
+            font-weight: 800;
+            color: #D4AF37;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+          }
+          .value {
+            font-size: 15px;
+            font-weight: 700;
+            color: #FFFFFF;
+            font-family: monospace;
+            margin-bottom: 12px;
+          }
+          .btn-container {
+            text-align: center;
+            margin: 35px 0;
+          }
+          .btn {
+            display: inline-block;
+            background-color: #D4AF37;
+            color: #0A0D14;
+            font-weight: 700;
+            font-size: 15px;
+            text-decoration: none;
+            padding: 16px 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 20px rgba(212, 175, 55, 0.25);
+          }
+          .footer {
+            background-color: #080B10;
+            padding: 30px;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+          }
+          .footer p {
+            font-size: 12px;
+            color: #475569;
+            margin: 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <span class="logo">PLOKITCH</span>
+          </div>
+          <div class="content">
+            <h1>Welcome to the Team!</h1>
+            <p>Hello ${name},</p>
+            <p>An administrator has registered your profile on Plokitch as an operational <strong>${roleName}</strong>.</p>
+            
+            <p>Your temporary account credentials have been generated below. Please log in using these details and update your password on your first session.</p>
+            
+            <div class="credentials-box">
+              <div class="label">Login Email</div>
+              <div class="value">${email}</div>
+              <div class="label">Temporary Password</div>
+              <div class="value">${tempPass}</div>
+            </div>
+            
+            <div class="btn-container">
+              <a href="${dashboardUrl}" class="btn">Log In to Your Dashboard</a>
+            </div>
+          </div>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Plokitch. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  if (resend) {
+    console.log(`[Email] Sending credentials welcome email to ${email}...`);
+    try {
+      await resend.emails.send({
+        from: fromEmail,
+        to: email,
+        replyTo: replyToEmail,
+        subject: `Welcome to Plokitch! Your ${role === "chef" ? "Chef" : "Rider"} Account is Ready`,
+        html: htmlContent,
+      });
+    } catch (err) {
+      console.error("[Email] Failed to send credentials email:", err);
+    }
+  } else {
+    console.log("┌────────────────────────────────────────────────────────────┐");
+    console.log("│ 📢 DEVELOPER NOTICE: RESEND_API_KEY NOT CONFIGURED         │");
+    console.log(`│ Welcome Email simulated for: ${email}                      │`);
+    console.log(`│ Role: ${roleName}                                           │`);
+    console.log(`│ Temp Password: ${tempPass}                                 │`);
+    console.log("└────────────────────────────────────────────────────────────┘");
+    return { mock: true, success: true };
+  }
+}

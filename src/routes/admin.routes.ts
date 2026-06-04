@@ -5,6 +5,7 @@ import { user, vendor, order, invite } from "../db/schema.js";
 import { eq, count, sql, and, isNull, gt } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
 import { sendInviteEmail } from "../lib/email.js";
+import { NotificationService } from "../services/notification.service.js";
 
 /**
  * Admin routes — /api/admin
@@ -65,6 +66,34 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
       if (!updated) {
         return reply.status(404).send({ success: false, error: "Vendor not found" });
+      }
+
+      // Send notification when verified
+      if (body.isVerified) {
+        try {
+          await NotificationService.send({
+            userId: updated.userId,
+            title: "Chef Account Verified",
+            message: `Congratulations! Your vendor profile "${updated.businessName}" has been verified. You can now receive orders.`,
+            type: "onboarding",
+            entityType: "vendor",
+            entityId: updated.id,
+            emailSubject: `[Plokitch] Your Chef Account is Verified!`,
+            emailHtml: `
+              <div style="font-family: sans-serif; background-color: #0A0D14; color: #E2E8F0; padding: 30px; border-radius: 12px; border: 1px solid rgba(212,175,55,0.15);">
+                <h2 style="color: #D4AF37; margin-top: 0;">🎉 Account Verified!</h2>
+                <p>Hello Chef,</p>
+                <p>We are excited to inform you that your vendor account <strong>${updated.businessName}</strong> has been officially verified by the Plokitch administration.</p>
+                <p>You can now log in, build your menu, set your hours, and start accepting customer orders!</p>
+                <div style="margin-top: 25px;">
+                  <a href="https://dashboard.plokitch.app" style="display: inline-block; background-color: #D4AF37; color: #0A0D14; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Go to Dashboard</a>
+                </div>
+              </div>
+            `
+          });
+        } catch (err) {
+          fastify.log.error(err, "Failed to send vendor verification notification");
+        }
       }
 
       return reply.send({ success: true, data: updated });

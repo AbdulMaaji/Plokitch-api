@@ -5,6 +5,7 @@ import { db } from "../db/index.js";
 import { eq } from "drizzle-orm";
 import { invite, vendor, riderProfile, user, session as sessionSchema } from "../db/schema.js";
 import { randomUUID } from "crypto";
+import { sendCredentialsEmail } from "../lib/email.js";
 
 const COOKIE_DOMAIN =
   process.env.NODE_ENV === "production" ? ".plokitch.app" : undefined;
@@ -232,6 +233,10 @@ export async function authRoutes(fastify: FastifyInstance) {
             : {}),
         });
 
+        const isSignUp =
+          request.method === "POST" &&
+          (request.url.endsWith("/sign-up/email") || request.url.endsWith("/signup"));
+
         const response = await auth.handler(req);
 
         reply.status(response.status);
@@ -249,6 +254,39 @@ export async function authRoutes(fastify: FastifyInstance) {
 
         if (response.status >= 400) {
           fastify.log.warn({ status: response.status, body }, "Auth handler error response");
+        } else if (isSignUp && response.status === 200) {
+          const reqBody = request.body as any;
+          const role = reqBody?.role;
+          const email = reqBody?.email?.toLowerCase().trim();
+          const name = reqBody?.name;
+          const password = reqBody?.password;
+
+          if (email && (role === "chef" || role === "rider")) {
+            // Find the newly created user in the database
+            const dbUser = await db.query.user.findFirst({
+              where: eq(user.email, email),
+            });
+
+            if (dbUser) {
+              // 1. Force update user's role since Better Auth defaults to customer
+              await db
+                .update(user)
+                .set({ role })
+                .where(eq(user.id, dbUser.id));
+
+              // 2. Send welcome email containing their temporary password
+              try {
+                await sendCredentialsEmail({
+                  email,
+                  name: name || dbUser.name || "Partner",
+                  role,
+                  tempPassword: password,
+                });
+              } catch (emailErr) {
+                fastify.log.error(emailErr, "Failed to send credentials welcome email");
+              }
+            }
+          }
         }
 
         return reply.send(body || null);

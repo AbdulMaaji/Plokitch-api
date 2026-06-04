@@ -303,6 +303,20 @@ export const auditLog = pgTable("audit_log", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const notification = pgTable("notification", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull(), // 'order_status' | 'onboarding' | 'complaint' | 'payout' | 'general'
+  isRead: boolean("is_read").notNull().default(false),
+  entityType: text("entity_type"), // 'order' | 'complaint' | 'vendor' | 'rider_profile'
+  entityId: text("entity_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ──────────────────────────────────────────────────────────────
 // Relations
 // ──────────────────────────────────────────────────────────────
@@ -314,6 +328,11 @@ export const userRelations = relations(user, ({ one, many }) => ({
   ordersAsRider: many(order, { relationName: "riderDeliveries" }),
   reviews: many(review),
   favorites: many(favoriteVendor),
+  notifications: many(notification),
+}));
+
+export const notificationRelations = relations(notification, ({ one }) => ({
+  user: one(user, { fields: [notification.userId], references: [user.id] }),
 }));
 
 export const vendorRelations = relations(vendor, ({ one, many }) => ({
