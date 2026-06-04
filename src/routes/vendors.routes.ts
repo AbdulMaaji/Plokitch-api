@@ -75,48 +75,57 @@ export async function vendorRoutes(fastify: FastifyInstance) {
 
   // GET /api/vendors/:id — get single vendor with menu (public, supports ID or slug)
   fastify.get("/api/vendors/:id", async (request, reply) => {
-    const { id } = request.params as { id: string };
+    try {
+      const { id } = request.params as { id: string };
 
-    // Check if it's a UUID or a slug
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      // Check if it's a UUID or a slug
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
-    const vendorData = await db.query.vendor.findFirst({
-      where: isUuid ? eq(vendor.id, id) : eq(vendor.slug, id),
-      with: {
-        user: {
-          columns: {
-            name: true,
-            image: true,
-          }
+      const vendorData = await db.query.vendor.findFirst({
+        where: isUuid ? eq(vendor.id, id) : eq(vendor.slug, id),
+        with: {
+          user: {
+            columns: {
+              name: true,
+              image: true,
+            }
+          },
+          menuItems: {
+            where: eq(menuItem.isAvailable, true),
+            orderBy: (m, { desc }) => [desc(m.isFeatured), desc(m.rating)],
+          },
         },
-        menuItems: {
-          where: eq(menuItem.isAvailable, true),
-          orderBy: (m, { desc }) => [desc(m.isFeatured), desc(m.rating)],
-        },
-      },
-    });
+      });
 
-    if (!vendorData) {
-      return reply.status(404).send({
+      if (!vendorData) {
+        return reply.status(404).send({
+          success: false,
+          error: "Kitchen not found",
+          code: "NOT_FOUND",
+        });
+      }
+
+      // Get order count
+      const [orderCount] = await db
+        .select({ value: count() })
+        .from(order)
+        .where(eq(order.vendorId, vendorData.id));
+
+      return reply.send({ 
+        success: true, 
+        data: { 
+          ...vendorData, 
+          totalOrders: Number(orderCount.value) 
+        } 
+      });
+    } catch (err: any) {
+      request.log.error(err, `Failed to fetch vendor: ${(request.params as any).id}`);
+      return reply.status(500).send({
         success: false,
-        error: "Kitchen not found",
-        code: "NOT_FOUND",
+        error: err.message || "Failed to fetch vendor details",
+        code: "SERVER_ERROR",
       });
     }
-
-    // Get order count
-    const [orderCount] = await db
-      .select({ value: count() })
-      .from(order)
-      .where(eq(order.vendorId, vendorData.id));
-
-    return reply.send({ 
-      success: true, 
-      data: { 
-        ...vendorData, 
-        totalOrders: Number(orderCount.value) 
-      } 
-    });
   });
 
   // POST /api/vendors — create vendor profile (chef role)

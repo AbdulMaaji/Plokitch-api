@@ -3,7 +3,8 @@ import { Resend } from "resend";
 // Initialize Resend client if key is provided
 const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
-const fromEmail = process.env.EMAIL_FROM || "Plokitch Onboarding <onboarding@resend.dev>";
+const fromEmail = process.env.EMAIL_FROM || "Plokitch <support@plokitch.app>";
+const fromEmailInvite = process.env.EMAIL_FROM_INVITE || "Plokitch <no-reply@plokitch.app>";
 const replyToEmail = process.env.EMAIL_REPLY_TO || "support@plokitch.app";
 
 interface SendInviteEmailParams {
@@ -172,7 +173,7 @@ export async function sendInviteEmail({ email, role, inviteLink, expiresAt }: Se
     console.log(`[Email] Sending Resend invite to ${email}...`);
     try {
       const response = await resend.emails.send({
-        from: fromEmail,
+        from: fromEmailInvite,
         to: email,
         replyTo: replyToEmail,
         subject: `You're invited to join Plokitch as a ${role === "vendor" ? "Vendor" : "Rider"}`,
@@ -588,6 +589,209 @@ export async function sendGeneralWelcomeEmail({ email, name, role }: SendWelcome
     console.log(`│ Onboarding Welcome Email simulated for: ${email}           │`);
     console.log(`│ Name: ${name}                                              │`);
     console.log(`│ Role: ${roleTitle}                                         │`);
+    console.log("└────────────────────────────────────────────────────────────┘");
+    return { mock: true, success: true };
+  }
+}
+
+interface SendJoinApplicationParams {
+  fullName: string;
+  email: string;
+  phone: string;
+  role: "chef" | "rider";
+  message?: string;
+  location?: string;
+}
+
+export async function sendJoinApplicationEmail(params: SendJoinApplicationParams) {
+  const { fullName, email, phone, role, message, location } = params;
+  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL || "plokitch@gmail.com";
+  const roleName = role === "chef" ? "Chef / Vendor" : "Delivery Rider";
+
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>New Partner Application — Plokitch</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #0A0D14;
+            color: #E2E8F0;
+            margin: 0;
+            padding: 0;
+          }
+          .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #121620;
+            border-radius: 24px;
+            overflow: hidden;
+            border: 1px solid rgba(212, 175, 55, 0.15);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+          }
+          .header {
+            background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(212, 175, 55, 0.02));
+            padding: 40px 30px;
+            text-align: center;
+            border-bottom: 1px solid rgba(212, 175, 55, 0.1);
+          }
+          .logo {
+            font-size: 28px;
+            font-weight: 800;
+            color: #D4AF37;
+          }
+          .badge {
+            display: inline-block;
+            background-color: rgba(212, 175, 55, 0.15);
+            color: #D4AF37;
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            padding: 6px 16px;
+            border-radius: 20px;
+            margin-top: 12px;
+          }
+          .content { padding: 40px 30px; }
+          h1 {
+            font-size: 22px;
+            font-weight: 700;
+            color: #FFFFFF;
+            margin-top: 0;
+            margin-bottom: 8px;
+          }
+          .subtitle {
+            font-size: 14px;
+            color: #64748B;
+            margin-bottom: 30px;
+          }
+          .field-group {
+            background-color: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 20px;
+          }
+          .field {
+            margin-bottom: 16px;
+          }
+          .field:last-child { margin-bottom: 0; }
+          .field-label {
+            font-size: 10px;
+            font-weight: 800;
+            color: #D4AF37;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 4px;
+          }
+          .field-value {
+            font-size: 15px;
+            font-weight: 600;
+            color: #FFFFFF;
+          }
+          .message-box {
+            background-color: rgba(212, 175, 55, 0.03);
+            border-left: 3px solid #D4AF37;
+            padding: 16px 20px;
+            border-radius: 0 12px 12px 0;
+            margin-top: 20px;
+          }
+          .message-text {
+            font-size: 14px;
+            color: #94A3B8;
+            line-height: 1.6;
+            font-style: italic;
+          }
+          .footer {
+            background-color: #080B10;
+            padding: 24px 30px;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+          }
+          .footer p {
+            font-size: 11px;
+            color: #475569;
+            margin: 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo">PLOKITCH</div>
+            <div class="badge">New Partner Application</div>
+          </div>
+          <div class="content">
+            <h1>New ${roleName} Application</h1>
+            <p class="subtitle">Submitted on ${new Date().toLocaleString("en-NG", { dateStyle: "full", timeStyle: "short" })}</p>
+            
+            <div class="field-group">
+              <div class="field">
+                <div class="field-label">Full Name</div>
+                <div class="field-value">${fullName}</div>
+              </div>
+              <div class="field">
+                <div class="field-label">Email Address</div>
+                <div class="field-value">${email}</div>
+              </div>
+              <div class="field">
+                <div class="field-label">Phone Number</div>
+                <div class="field-value">${phone}</div>
+              </div>
+              <div class="field">
+                <div class="field-label">Desired Role</div>
+                <div class="field-value">${roleName}</div>
+              </div>
+              ${location ? `
+              <div class="field">
+                <div class="field-label">Location / Area</div>
+                <div class="field-value">${location}</div>
+              </div>
+              ` : ""}
+            </div>
+
+            ${message ? `
+            <div class="message-box">
+              <div class="field-label" style="margin-bottom: 8px;">Applicant Message</div>
+              <div class="message-text">"${message}"</div>
+            </div>
+            ` : ""}
+          </div>
+          <div class="footer">
+            <p>This application was submitted via the Plokitch website join form.</p>
+            <p style="margin-top: 6px;">© ${new Date().getFullYear()} Plokitch Marketplace</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  if (resend) {
+    console.log(`[Email] Sending join application from ${fullName} (${role}) to ${adminEmail}...`);
+    try {
+      const response = await resend.emails.send({
+        from: fromEmail,
+        to: adminEmail,
+        replyTo: email,
+        subject: `New ${roleName} Application — ${fullName}`,
+        html: htmlContent,
+      });
+      console.log(`[Email] Join application email sent:`, response);
+      return response;
+    } catch (error) {
+      console.error(`[Email] Failed to send join application:`, error);
+      throw error;
+    }
+  } else {
+    console.log("┌────────────────────────────────────────────────────────────┐");
+    console.log("│ 📢 DEVELOPER NOTICE: RESEND_API_KEY NOT CONFIGURED         │");
+    console.log(`│ Join Application simulated for: ${fullName}                │`);
+    console.log(`│ Role: ${roleName}                                           │`);
+    console.log(`│ Email: ${email}                                             │`);
+    console.log(`│ To Admin: ${adminEmail}                                     │`);
     console.log("└────────────────────────────────────────────────────────────┘");
     return { mock: true, success: true };
   }

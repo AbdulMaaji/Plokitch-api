@@ -14,6 +14,7 @@ import { adminRoutes } from "./routes/admin.routes.js";
 import { locationRoutes } from "./routes/location.routes.js";
 import { favoriteRoutes } from "./routes/favorites.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
+import { contactRoutes } from "./routes/contact.routes.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 
 const PORT = parseInt(process.env.PORT ?? "4000");
@@ -143,6 +144,7 @@ await fastify.register(adminRoutes);
 await fastify.register(locationRoutes);
 await fastify.register(favoriteRoutes);
 await fastify.register(notificationRoutes);
+await fastify.register(contactRoutes);
 
 // ──────────────────────────────────────────────────────────────
 // 404 handler
