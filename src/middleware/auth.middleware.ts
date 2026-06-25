@@ -24,7 +24,9 @@ export async function requireAuth(
   if (internalSecret && internalSecret === process.env.INTERNAL_API_SECRET) {
     (request as any).session = {
       user: {
-        id: "internal-admin",
+        // Synthetic proxy has no real user row, so id is null to avoid
+        // violating FK columns (e.g. reviewedBy) when handlers persist it.
+        id: null,
         role: "admin",
         email: "admin@plokitch.app",
         name: "Internal Admin Proxy",

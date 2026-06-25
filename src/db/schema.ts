@@ -20,6 +20,7 @@ export const userRoleEnum = pgEnum("user_role", [
   "chef",
   "rider",
   "admin",
+  "company_rider",
 ]);
 
 export const orderStatusEnum = pgEnum("order_status", [
@@ -40,6 +41,21 @@ export const menuCategoryEnum = pgEnum("menu_category", [
   "drinks",
   "starters",
   "specials",
+]);
+
+export const riderTypeEnum = pgEnum("rider_type", ["single", "company"]);
+
+export const applicationStatusEnum = pgEnum("application_status", [
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const applicantTypeEnum = pgEnum("applicant_type", [
+  "vendor",
+  "home_chef",
+  "single_rider",
+  "delivery_company",
 ]);
 
 // ──────────────────────────────────────────────────────────────
@@ -250,6 +266,28 @@ export const favoriteVendor = pgTable("favorite_vendor", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// A delivery company / fleet operator. One owner account per company.
+export const deliveryCompany = pgTable("delivery_company", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  // FK to Better Auth users (text id) — the company owner account.
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  companyName: text("company_name").notNull(),
+  contactName: text("contact_name").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  contactPhone: text("contact_phone").notNull(),
+  rcNumber: text("rc_number"),
+  fleetSize: integer("fleet_size").default(0),
+  applicationStatus: applicationStatusEnum("application_status")
+    .notNull()
+    .default("pending"),
+  approvedAt: timestamp("approved_at"),
+  // FK to Better Auth users (text id) — the admin who approved.
+  approvedBy: text("approved_by").references(() => user.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const riderProfile = pgTable("rider_profile", {
   id: uuid("id").defaultRandom().primaryKey(),
   userId: text("user_id")
@@ -267,6 +305,17 @@ export const riderProfile = pgTable("rider_profile", {
   totalDeliveries: integer("total_deliveries").default(0),
   totalEarnings: decimal("total_earnings", { precision: 12, scale: 2 }).default("0"),
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0.00"),
+  // Fleet model: "single" = independent rider, "company" = sub-rider of a fleet.
+  riderType: riderTypeEnum("rider_type").notNull().default("single"),
+  // null = independent single rider; set = sub-rider belonging to a company.
+  companyId: uuid("company_id").references(() => deliveryCompany.id, {
+    onDelete: "set null",
+  }),
+  applicationStatus: applicationStatusEnum("application_status")
+    .notNull()
+    .default("pending"),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: text("approved_by").references(() => user.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -300,6 +349,33 @@ export const auditLog = pgTable("audit_log", {
   oldData: jsonb("old_data"),
   newData: jsonb("new_data"),
   ipAddress: text("ip_address"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Public applications from the "Join Us" page, captured BEFORE a Better Auth
+// account exists. Admin reviews these, then triggers an invite that creates the
+// actual operator account (vendor / rider / company).
+export const joinApplication = pgTable("join_application", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  applicantType: applicantTypeEnum("applicant_type").notNull(),
+  businessName: text("business_name"),
+  contactName: text("contact_name").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  contactPhone: text("contact_phone").notNull(),
+  location: text("location"),
+  cuisineTypes: text("cuisine_types").array(),
+  kitchenBio: text("kitchen_bio"),
+  vehicleType: text("vehicle_type"),
+  vehiclePlate: text("vehicle_plate"),
+  rcNumber: text("rc_number"),
+  declaredFleetSize: integer("declared_fleet_size"),
+  operatingZones: text("operating_zones").array(),
+  applicationStatus: applicationStatusEnum("application_status")
+    .notNull()
+    .default("pending"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedBy: text("reviewed_by").references(() => user.id),
+  rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -351,6 +427,15 @@ export const reviewRelations = relations(review, ({ one }) => ({
 
 export const riderProfileRelations = relations(riderProfile, ({ one }) => ({
   user: one(user, { fields: [riderProfile.userId], references: [user.id] }),
+  company: one(deliveryCompany, {
+    fields: [riderProfile.companyId],
+    references: [deliveryCompany.id],
+  }),
+}));
+
+export const deliveryCompanyRelations = relations(deliveryCompany, ({ one, many }) => ({
+  owner: one(user, { fields: [deliveryCompany.userId], references: [user.id] }),
+  riders: many(riderProfile),
 }));
 
 export const favoriteVendorRelations = relations(favoriteVendor, ({ one }) => ({

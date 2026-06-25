@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { order, vendor } from "../db/schema.js";
 import { eq, and, or, inArray, isNull } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
+import { resolveDeliveryFee } from "../lib/pricing.js";
 
 /**
  * Order routes — /api/orders
@@ -28,13 +29,20 @@ export async function orderRoutes(fastify: FastifyInstance) {
           state: string;
           instructions?: string;
         };
+        deliveryZone?: string;
         notes?: string;
         isPriority?: boolean;
       };
 
-      const totalAmount = body.items
-        .reduce((sum, item) => sum + item.price * item.quantity, 0)
-        .toFixed(2);
+      const itemsTotal = body.items.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      );
+
+      // Delivery fee is always recomputed server-side from the zone string —
+      // any client-sent fee is ignored to prevent tampering.
+      const deliveryFee = resolveDeliveryFee(body.deliveryZone);
+      const totalAmount = (itemsTotal + deliveryFee).toFixed(2);
 
       const [newOrder] = await db
         .insert(order)
@@ -43,6 +51,7 @@ export async function orderRoutes(fastify: FastifyInstance) {
           vendorId: body.vendorId,
           items: body.items,
           totalAmount,
+          deliveryFee: deliveryFee.toFixed(2),
           deliveryAddress: body.deliveryAddress,
           notes: body.notes,
           status: "pending",
