@@ -11,6 +11,7 @@ import { vendorRoutes } from "./routes/vendors.routes.js";
 import { orderRoutes } from "./routes/orders.routes.js";
 import { riderRoutes } from "./routes/riders.routes.js";
 import { adminRoutes } from "./routes/admin.routes.js";
+import { applicationRoutes } from "./routes/applications.routes.js";
 import { locationRoutes } from "./routes/location.routes.js";
 import { favoriteRoutes } from "./routes/favorites.routes.js";
 import { errorHandler } from "./middleware/error.middleware.js";
@@ -139,6 +140,7 @@ await fastify.register(vendorRoutes);
 await fastify.register(orderRoutes);
 await fastify.register(riderRoutes);
 await fastify.register(adminRoutes);
+await fastify.register(applicationRoutes);
 await fastify.register(locationRoutes);
 await fastify.register(favoriteRoutes);
 

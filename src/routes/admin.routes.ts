@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/index.js";
 import crypto from "crypto";
-import { user, vendor, order, invite } from "../db/schema.js";
-import { eq, count, sql, and, isNull, gt } from "drizzle-orm";
+import { user, vendor, order, invite, joinApplication } from "../db/schema.js";
+import { eq, count, sql, and, isNull, gt, or, ilike, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
 import { sendInviteEmail, sendRiderInviteEmail } from "../lib/email.js";
 
@@ -337,6 +337,76 @@ export async function adminRoutes(fastify: FastifyInstance) {
         .where(eq(invite.id, id));
 
       return reply.send({ success: true, message: "Invitation successfully revoked" });
+    }
+  );
+
+  // GET /api/admin/applications — list "Join Us" applications with filters
+  fastify.get(
+    "/api/admin/applications",
+    { preHandler: [requireAuth, requireRole("admin")] },
+    async (request, reply) => {
+      const { type, status, search } = request.query as {
+        type?: string;
+        status?: string;
+        search?: string;
+      };
+
+      const validTypes = ["vendor", "home_chef", "single_rider", "delivery_company"];
+      const validStatuses = ["pending", "approved", "rejected"];
+
+      const conditions: SQL[] = [];
+
+      if (type && type !== "all") {
+        if (!validTypes.includes(type)) {
+          return reply.status(400).send({ success: false, error: "Invalid type filter" });
+        }
+        conditions.push(eq(joinApplication.applicantType, type as any));
+      }
+
+      if (status && status !== "all") {
+        if (!validStatuses.includes(status)) {
+          return reply.status(400).send({ success: false, error: "Invalid status filter" });
+        }
+        conditions.push(eq(joinApplication.applicationStatus, status as any));
+      }
+
+      if (search && search.trim()) {
+        const term = `%${search.trim()}%`;
+        const searchCond = or(
+          ilike(joinApplication.contactName, term),
+          ilike(joinApplication.contactEmail, term),
+          ilike(joinApplication.businessName, term),
+          ilike(joinApplication.contactPhone, term)
+        );
+        if (searchCond) conditions.push(searchCond);
+      }
+
+      const applications = await db
+        .select()
+        .from(joinApplication)
+        .where(conditions.length ? and(...conditions) : undefined)
+        .orderBy(desc(joinApplication.createdAt));
+
+      return reply.send({ success: true, data: applications });
+    }
+  );
+
+  // GET /api/admin/applications/:id — single application
+  fastify.get(
+    "/api/admin/applications/:id",
+    { preHandler: [requireAuth, requireRole("admin")] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      const application = await db.query.joinApplication.findFirst({
+        where: eq(joinApplication.id, id),
+      });
+
+      if (!application) {
+        return reply.status(404).send({ success: false, error: "Application not found" });
+      }
+
+      return reply.send({ success: true, data: application });
     }
   );
 }

@@ -369,3 +369,74 @@ export async function sendRiderInviteEmail({
     context: "rider-single-invite",
   });
 }
+
+// ──────────────────────────────────────────────────────────────
+// Internal admin alert — fired when a public "Join Us" application
+// is submitted, so an admin can review it promptly.
+// ──────────────────────────────────────────────────────────────
+interface SendNewApplicationAlertParams {
+  applicantType: "vendor" | "home_chef" | "single_rider" | "delivery_company";
+  contactName: string;
+  contactEmail: string;
+  contactPhone?: string;
+  businessName?: string | null;
+  location?: string | null;
+}
+
+const APPLICANT_TYPE_LABELS: Record<
+  SendNewApplicationAlertParams["applicantType"],
+  string
+> = {
+  vendor: "Vendor",
+  home_chef: "Home Chef",
+  single_rider: "Single Rider",
+  delivery_company: "Delivery Company / Fleet",
+};
+
+export async function sendNewApplicationAlert({
+  applicantType,
+  contactName,
+  contactEmail,
+  contactPhone,
+  businessName,
+  location,
+}: SendNewApplicationAlertParams) {
+  const typeLabel = APPLICANT_TYPE_LABELS[applicantType];
+
+  // Notify the platform inbox. Falls back to EMAIL_REPLY_TO if no dedicated
+  // admin alert address is configured.
+  const adminInbox =
+    process.env.ADMIN_ALERT_EMAIL || process.env.EMAIL_REPLY_TO || replyToEmail;
+
+  const highlights: Array<{ label: string; value: string }> = [
+    { label: "Applicant Type", value: typeLabel },
+    { label: "Contact Name", value: contactName },
+    { label: "Contact Email", value: contactEmail },
+  ];
+  if (contactPhone) highlights.push({ label: "Contact Phone", value: contactPhone });
+  if (businessName) highlights.push({ label: "Business / Company", value: businessName });
+  if (location) highlights.push({ label: "Location", value: location });
+
+  const dashboardUrl = process.env.DASHBOARD_URL || "http://localhost:3000";
+  const reviewLink = `${dashboardUrl}/admin/dashboard/applications`;
+
+  const html = renderShell({
+    title: "New Plokitch Application",
+    heading: "New Application Received",
+    intro: `A new <strong>${typeLabel}</strong> application has just been submitted through the Join Us page and is awaiting review.`,
+    highlights,
+    bodyParagraphs: [
+      "Open the admin applications queue to review the full submission, then approve or reject it:",
+    ],
+    ctaLabel: "Review Applications",
+    ctaLink: reviewLink,
+    footerNote: "This is an automated internal notification from the Plokitch platform.",
+  });
+
+  return dispatchEmail({
+    to: adminInbox,
+    subject: `New ${typeLabel} application — ${businessName || contactName}`,
+    html,
+    context: "admin-application-alert",
+  });
+}

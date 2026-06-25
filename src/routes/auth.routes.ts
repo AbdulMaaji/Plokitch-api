@@ -138,6 +138,11 @@ export async function authRoutes(fastify: FastifyInstance) {
           userId,
           isAvailable: false,
           isVerified: false,
+          // Riders onboarded through the admin invite flow are pre-approved,
+          // so the new application-gating model doesn't lock them out.
+          riderType: "single",
+          applicationStatus: "approved",
+          approvedAt: new Date(),
         });
       }
 
