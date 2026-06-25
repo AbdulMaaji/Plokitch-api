@@ -13,6 +13,7 @@ import { riderRoutes } from "./routes/riders.routes.js";
 import { adminRoutes } from "./routes/admin.routes.js";
 import { applicationRoutes } from "./routes/applications.routes.js";
 import { contactRoutes } from "./routes/contact.routes.js";
+import { paymentRoutes } from "./routes/payments.routes.js";
 import { fleetRoutes } from "./routes/fleet.routes.js";
 import { locationRoutes } from "./routes/location.routes.js";
 import { favoriteRoutes } from "./routes/favorites.routes.js";
@@ -144,6 +145,9 @@ await fastify.register(riderRoutes);
 await fastify.register(adminRoutes);
 await fastify.register(applicationRoutes);
 await fastify.register(contactRoutes);
+// Payment routes register their own scoped raw-body parser (for Paystack
+// webhook signature verification), so other routes are unaffected.
+await fastify.register(paymentRoutes, { prefix: "/api/payments" });
 await fastify.register(fleetRoutes, { prefix: "/api/fleet" });
 await fastify.register(locationRoutes);
 await fastify.register(favoriteRoutes);
