@@ -73,19 +73,42 @@ function renderShell(opts: {
   title: string;
   heading: string;
   intro: string;
-  highlights: Array<{ label: string; value: string }>;
+  highlights?: Array<{ label: string; value: string }>;
   bodyParagraphs: string[];
-  ctaLabel: string;
-  ctaLink: string;
+  ctaLabel?: string;
+  ctaLink?: string;
   footerNote: string;
+  /** Optional teal-bordered quote block (e.g. a rejection reason). */
+  quote?: { label?: string; text: string };
 }) {
-  const highlightsHtml = opts.highlights
-    .map(
-      (h, i) => `
+  const highlightsHtml =
+    opts.highlights && opts.highlights.length
+      ? `
+            <div class="highlight-box">${opts.highlights
+              .map(
+                (h, i) => `
             <div${i > 0 ? ' style="margin-top: 12px;"' : ""} class="highlight-label">${h.label}</div>
             <div class="highlight-value">${h.value}</div>`
-    )
-    .join("");
+              )
+              .join("")}
+            </div>`
+      : "";
+
+  const quoteHtml = opts.quote
+    ? `
+            <div class="quote-box">
+              ${opts.quote.label ? `<div class="quote-label">${opts.quote.label}</div>` : ""}
+              <div class="quote-text">${opts.quote.text}</div>
+            </div>`
+    : "";
+
+  const ctaHtml =
+    opts.ctaLabel && opts.ctaLink
+      ? `
+            <div class="btn-container">
+              <a href="${opts.ctaLink}" class="btn">${opts.ctaLabel}</a>
+            </div>`
+      : "";
 
   const paragraphsHtml = opts.bodyParagraphs
     .map((p) => `<p>${p}</p>`)
@@ -200,6 +223,27 @@ function renderShell(opts: {
             text-align: center;
             margin-top: 20px;
           }
+          .quote-box {
+            background-color: rgba(45, 212, 191, 0.06);
+            border-left: 3px solid #2DD4BF;
+            padding: 16px 20px;
+            border-radius: 0 12px 12px 0;
+            margin-bottom: 28px;
+          }
+          .quote-label {
+            font-size: 11px;
+            font-weight: 800;
+            color: #2DD4BF;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+          }
+          .quote-text {
+            font-size: 15px;
+            color: #CBD5E1;
+            font-style: italic;
+            line-height: 1.5;
+          }
         </style>
       </head>
       <body>
@@ -210,15 +254,10 @@ function renderShell(opts: {
           <div class="content">
             <h1>${opts.heading}</h1>
             <p>${opts.intro}</p>
-
-            <div class="highlight-box">${highlightsHtml}
-            </div>
-
+            ${highlightsHtml}
+            ${quoteHtml}
             ${paragraphsHtml}
-
-            <div class="btn-container">
-              <a href="${opts.ctaLink}" class="btn">${opts.ctaLabel}</a>
-            </div>
+            ${ctaHtml}
 
             <p class="warning-text">
               ${opts.footerNote}
@@ -438,5 +477,44 @@ export async function sendNewApplicationAlert({
     subject: `New ${typeLabel} application — ${businessName || contactName}`,
     html,
     context: "admin-application-alert",
+  });
+}
+
+// ──────────────────────────────────────────────────────────────
+// Application rejection notice
+// ──────────────────────────────────────────────────────────────
+interface SendRejectionEmailParams {
+  name: string;
+  email: string;
+  reason?: string;
+}
+
+export async function sendRejectionEmail({
+  name,
+  email,
+  reason,
+}: SendRejectionEmailParams) {
+  const supportEmail = process.env.EMAIL_REPLY_TO || replyToEmail;
+
+  const html = renderShell({
+    title: "Update on your Plokitch application",
+    heading: "Application Update",
+    intro:
+      `Hi ${name},<br><br>` +
+      "Thank you for your interest in joining the Plokitch platform.<br><br>" +
+      "After carefully reviewing your application, we're unable to proceed at this time.",
+    quote: reason ? { label: "Reviewer note", text: reason } : undefined,
+    bodyParagraphs: [
+      "You're welcome to reapply after 30 days.",
+      `If you have questions, reach us at <a href="mailto:${supportEmail}" style="color: #D4AF37; text-decoration: none;">${supportEmail}</a>.`,
+    ],
+    footerNote: "This is an automated message regarding your Plokitch application.",
+  });
+
+  return dispatchEmail({
+    to: email,
+    subject: "Update on your Plokitch application",
+    html,
+    context: "application-rejection",
   });
 }

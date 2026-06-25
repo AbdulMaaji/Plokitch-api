@@ -4,7 +4,7 @@ import crypto from "crypto";
 import { user, vendor, order, invite, joinApplication } from "../db/schema.js";
 import { eq, count, sql, and, isNull, gt, or, ilike, desc, type SQL } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
-import { sendInviteEmail, sendRiderInviteEmail } from "../lib/email.js";
+import { sendInviteEmail, sendRiderInviteEmail, sendRejectionEmail } from "../lib/email.js";
 
 /** Optional metadata used to personalise & branch invite emails. */
 interface RiderInviteOptions {
@@ -106,13 +106,22 @@ export async function adminRoutes(fastify: FastifyInstance) {
   // re-thrown in production so they are never silently swallowed.
   async function dispatchOnboardingEmail(
     normalizedEmail: string,
-    role: "chef" | "rider",
+    role: "chef" | "rider" | "company",
     inviteLink: string,
     expiresAt: Date,
     opts: RiderInviteOptions
   ) {
     try {
-      if (role === "rider") {
+      if (role === "company") {
+        await sendRiderInviteEmail({
+          email: normalizedEmail,
+          inviteLink,
+          expiresAt,
+          riderType: "company",
+          name: opts.name,
+          companyName: opts.companyName,
+        });
+      } else if (role === "rider") {
         await sendRiderInviteEmail({
           email: normalizedEmail,
           inviteLink,
@@ -138,16 +147,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   }
 
-  // Helper function to create/reuse plain-token invites cleanly
+  // Helper function to create/reuse plain-token invites cleanly.
+  // `executor` lets callers run this inside a transaction (defaults to the
+  // shared db connection).
   async function createInviteHelper(
     email: string,
-    role: "chef" | "rider",
-    opts: RiderInviteOptions = {}
+    role: "chef" | "rider" | "company",
+    opts: RiderInviteOptions = {},
+    executor: typeof db = db
   ) {
     const normalizedEmail = email.trim().toLowerCase();
 
     // Check if user already exists
-    const existingUser = await db.query.user.findFirst({
+    const existingUser = await executor.query.user.findFirst({
       where: eq(user.email, normalizedEmail),
     });
 
@@ -156,7 +168,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
 
     // Check if an active, unused, unexpired invite already exists
-    const activeInvite = await db.query.invite.findFirst({
+    const activeInvite = await executor.query.invite.findFirst({
       where: and(
         eq(invite.email, normalizedEmail),
         eq(invite.status, "active"),
@@ -184,7 +196,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    await db.insert(invite).values({
+    await executor.insert(invite).values({
       email: normalizedEmail,
       role,
       token,
@@ -407,6 +419,155 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
 
       return reply.send({ success: true, data: application });
+    }
+  );
+
+  // PATCH /api/admin/applications/:id/approve — approve & trigger onboarding invite
+  fastify.patch(
+    "/api/admin/applications/:id/approve",
+    { preHandler: [requireAuth, requireRole("admin")] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const adminId = (request as any).session?.user?.id as string;
+
+      const application = await db.query.joinApplication.findFirst({
+        where: eq(joinApplication.id, id),
+      });
+
+      if (!application) {
+        return reply.status(404).send({ success: false, error: "Application not found" });
+      }
+
+      if (
+        application.applicationStatus === "approved" ||
+        application.applicationStatus === "rejected"
+      ) {
+        return reply.status(409).send({ success: false, error: "Application already reviewed." });
+      }
+
+      try {
+        // Atomic: mark reviewed + create the onboarding invite together. The
+        // invite (and its email) is created inside createInviteHelper, threaded
+        // with the transaction executor so a failure rolls everything back.
+        // The actual operator account + profile (vendor / rider / deliveryCompany)
+        // is created later, when the invitee accepts the invite and sets a password.
+        await db.transaction(async (tx) => {
+          await tx
+            .update(joinApplication)
+            .set({
+              applicationStatus: "approved",
+              reviewedAt: new Date(),
+              reviewedBy: adminId,
+            })
+            .where(eq(joinApplication.id, id));
+
+          const txDb = tx as unknown as typeof db;
+
+          switch (application.applicantType) {
+            case "vendor":
+            case "home_chef":
+              await createInviteHelper(
+                application.contactEmail,
+                "chef",
+                { name: application.contactName },
+                txDb
+              );
+              break;
+
+            case "single_rider":
+              await createInviteHelper(
+                application.contactEmail,
+                "rider",
+                { name: application.contactName, riderType: "single" },
+                txDb
+              );
+              break;
+
+            case "delivery_company":
+              await createInviteHelper(
+                application.contactEmail,
+                "company",
+                {
+                  name: application.contactName,
+                  riderType: "company",
+                  companyName: application.businessName ?? application.contactName,
+                },
+                txDb
+              );
+              break;
+
+            default:
+              throw new Error(`Unsupported applicant type: ${application.applicantType}`);
+          }
+        });
+      } catch (err: any) {
+        fastify.log.error(err, "Application approval failed");
+        // Surface a genuine client conflict (e.g. user already exists) rather than masking it.
+        if (err?.status === 409) {
+          return reply.status(409).send({ success: false, error: err.error, code: err.code });
+        }
+        return reply.status(500).send({ success: false, error: "Approval failed. No changes made." });
+      }
+
+      return reply.send({
+        success: true,
+        message: `Approved. Invite sent to ${application.contactEmail}.`,
+      });
+    }
+  );
+
+  // PATCH /api/admin/applications/:id/reject — reject with optional reason
+  fastify.patch(
+    "/api/admin/applications/:id/reject",
+    { preHandler: [requireAuth, requireRole("admin")] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { reason } = (request.body as { reason?: string }) ?? {};
+      const adminId = (request as any).session?.user?.id as string;
+
+      const application = await db.query.joinApplication.findFirst({
+        where: eq(joinApplication.id, id),
+      });
+
+      if (!application) {
+        return reply.status(404).send({ success: false, error: "Application not found" });
+      }
+
+      if (
+        application.applicationStatus === "approved" ||
+        application.applicationStatus === "rejected"
+      ) {
+        return reply.status(409).send({ success: false, error: "Application already reviewed." });
+      }
+
+      try {
+        await db
+          .update(joinApplication)
+          .set({
+            applicationStatus: "rejected",
+            rejectionReason: reason ?? null,
+            reviewedAt: new Date(),
+            reviewedBy: adminId,
+          })
+          .where(eq(joinApplication.id, id));
+
+        // Mirror dispatchOnboardingEmail policy: log always, throw in production.
+        try {
+          await sendRejectionEmail({
+            name: application.contactName,
+            email: application.contactEmail,
+            reason,
+          });
+        } catch (emailErr) {
+          fastify.log.error(emailErr, "Failed to dispatch rejection email");
+          if (process.env.NODE_ENV === "production") throw emailErr;
+        }
+      } catch (err: any) {
+        fastify.log.error(err, "Application rejection failed");
+        return reply.status(500).send({ success: false, error: "Rejection failed." });
+      }
+
+      return reply.send({ success: true, message: "Application rejected." });
     }
   );
 }

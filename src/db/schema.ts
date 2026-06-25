@@ -20,6 +20,7 @@ export const userRoleEnum = pgEnum("user_role", [
   "chef",
   "rider",
   "admin",
+  "company_rider",
 ]);
 
 export const orderStatusEnum = pgEnum("order_status", [

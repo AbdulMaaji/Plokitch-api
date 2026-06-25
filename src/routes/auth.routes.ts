@@ -2,8 +2,16 @@ import type { FastifyInstance } from "fastify";
 import { fromNodeHeaders } from "better-auth/node";
 import { auth } from "../lib/auth.js";
 import { db } from "../db/index.js";
-import { eq } from "drizzle-orm";
-import { invite, vendor, riderProfile, user, session as sessionSchema } from "../db/schema.js";
+import { eq, and } from "drizzle-orm";
+import {
+  invite,
+  vendor,
+  riderProfile,
+  deliveryCompany,
+  joinApplication,
+  user,
+  session as sessionSchema,
+} from "../db/schema.js";
 import { randomUUID } from "crypto";
 
 const COOKIE_DOMAIN =
@@ -113,10 +121,15 @@ export async function authRoutes(fastify: FastifyInstance) {
       const userPayload = JSON.parse(bodyText || "{}");
       const userId = userPayload.user.id;
 
+      // Map the invite role to the platform user role. Company-fleet invites
+      // become "company_rider" owner accounts.
+      const userRole =
+        inviteRecord.role === "company" ? "company_rider" : (inviteRecord.role as "chef" | "rider");
+
       // Update the user record securely in the database to override standard "customer" default
       await db
         .update(user)
-        .set({ role: inviteRecord.role as "chef" | "rider" })
+        .set({ role: userRole })
         .where(eq(user.id, userId));
 
       // 3. Atomically initialize the operator's operational profile
@@ -143,6 +156,29 @@ export async function authRoutes(fastify: FastifyInstance) {
           riderType: "single",
           applicationStatus: "approved",
           approvedAt: new Date(),
+        });
+      } else if (inviteRecord.role === "company") {
+        // The fleet application was approved by an admin before this invite was
+        // sent — pull the captured company details from joinApplication.
+        const companyApp = await db.query.joinApplication.findFirst({
+          where: and(
+            eq(joinApplication.contactEmail, inviteRecord.email),
+            eq(joinApplication.applicantType, "delivery_company"),
+            eq(joinApplication.applicationStatus, "approved")
+          ),
+        });
+
+        await db.insert(deliveryCompany).values({
+          userId,
+          companyName: companyApp?.businessName ?? name,
+          contactName: companyApp?.contactName ?? name,
+          contactEmail: inviteRecord.email,
+          contactPhone: companyApp?.contactPhone ?? "",
+          rcNumber: companyApp?.rcNumber ?? null,
+          fleetSize: companyApp?.declaredFleetSize ?? 0,
+          applicationStatus: "approved",
+          approvedAt: companyApp?.reviewedAt ?? new Date(),
+          approvedBy: companyApp?.reviewedBy ?? null,
         });
       }
 
@@ -180,7 +216,12 @@ export async function authRoutes(fastify: FastifyInstance) {
       return reply.send({
         success: true,
         role: inviteRecord.role,
-        redirectTo: inviteRecord.role === "chef" ? "/chef" : "/rider",
+        redirectTo:
+          inviteRecord.role === "chef"
+            ? "/chef"
+            : inviteRecord.role === "company"
+              ? "/fleet"
+              : "/rider",
       });
     } catch (err: any) {
       fastify.log.error(err, "CRITICAL Accept invite processing error");
