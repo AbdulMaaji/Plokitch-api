@@ -4,7 +4,14 @@ import crypto from "crypto";
 import { user, vendor, order, invite } from "../db/schema.js";
 import { eq, count, sql, and, isNull, gt } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
-import { sendInviteEmail } from "../lib/email.js";
+import { sendInviteEmail, sendRiderInviteEmail } from "../lib/email.js";
+
+/** Optional metadata used to personalise & branch invite emails. */
+interface RiderInviteOptions {
+  name?: string;
+  riderType?: "single" | "company";
+  companyName?: string;
+}
 
 /**
  * Admin routes — /api/admin
@@ -93,8 +100,50 @@ export async function adminRoutes(fastify: FastifyInstance) {
     }
   );
 
+  // Dispatches the correct onboarding email for the operator role.
+  // Vendors get the generic partner invite; riders get the dedicated rider
+  // invite (single vs. company/fleet). Email failures are logged everywhere and
+  // re-thrown in production so they are never silently swallowed.
+  async function dispatchOnboardingEmail(
+    normalizedEmail: string,
+    role: "chef" | "rider",
+    inviteLink: string,
+    expiresAt: Date,
+    opts: RiderInviteOptions
+  ) {
+    try {
+      if (role === "rider") {
+        await sendRiderInviteEmail({
+          email: normalizedEmail,
+          inviteLink,
+          expiresAt,
+          riderType: opts.riderType ?? "single",
+          name: opts.name,
+          companyName: opts.companyName,
+        });
+      } else {
+        await sendInviteEmail({
+          email: normalizedEmail,
+          role: "vendor",
+          inviteLink,
+          expiresAt,
+          name: opts.name,
+        });
+      }
+    } catch (emailErr) {
+      console.error(`Failed to dispatch ${role} invite email to ${normalizedEmail}:`, emailErr);
+      if (process.env.NODE_ENV === "production") {
+        throw emailErr;
+      }
+    }
+  }
+
   // Helper function to create/reuse plain-token invites cleanly
-  async function createInviteHelper(email: string, role: "chef" | "rider") {
+  async function createInviteHelper(
+    email: string,
+    role: "chef" | "rider",
+    opts: RiderInviteOptions = {}
+  ) {
     const normalizedEmail = email.trim().toLowerCase();
 
     // Check if user already exists
@@ -121,16 +170,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     if (activeInvite) {
       const inviteLink = `${marketplaceUrl}/accept-invite?token=${activeInvite.token}`;
 
-      try {
-        await sendInviteEmail({
-          email: normalizedEmail,
-          role: role === "chef" ? "vendor" : "rider",
-          inviteLink,
-          expiresAt: activeInvite.expiresAt,
-        });
-      } catch (emailErr) {
-        console.error("Failed to dispatch active invite email:", emailErr);
-      }
+      await dispatchOnboardingEmail(normalizedEmail, role, inviteLink, activeInvite.expiresAt, opts);
 
       return {
         success: true,
@@ -154,16 +194,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
 
     const inviteLink = `${marketplaceUrl}/accept-invite?token=${token}`;
 
-    try {
-      await sendInviteEmail({
-        email: normalizedEmail,
-        role: role === "chef" ? "vendor" : "rider",
-        inviteLink,
-        expiresAt,
-      });
-    } catch (emailErr) {
-      console.error("Failed to dispatch new invite email:", emailErr);
-    }
+    await dispatchOnboardingEmail(normalizedEmail, role, inviteLink, expiresAt, opts);
 
     return {
       success: true,
@@ -196,12 +227,21 @@ export async function adminRoutes(fastify: FastifyInstance) {
     "/api/admin/riders/invite",
     { preHandler: [requireAuth, requireRole("admin")] },
     async (request, reply) => {
-      const body = request.body as { email: string };
+      const body = request.body as {
+        email: string;
+        name?: string;
+        riderType?: "single" | "company";
+        companyName?: string;
+      };
       if (!body.email) {
         return reply.status(400).send({ success: false, error: "Email is required" });
       }
       try {
-        const result = await createInviteHelper(body.email, "rider");
+        const result = await createInviteHelper(body.email, "rider", {
+          name: body.name,
+          riderType: body.riderType ?? "single",
+          companyName: body.companyName,
+        });
         return reply.status(result.reused ? 200 : 201).send(result);
       } catch (err: any) {
         if (err.status) return reply.status(err.status).send({ success: false, error: err.error, code: err.code });
@@ -253,7 +293,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
     "/api/admin/invites",
     { preHandler: [requireAuth, requireRole("admin")] },
     async (request, reply) => {
-      const body = request.body as { email: string; role: "chef" | "rider" };
+      const body = request.body as {
+        email: string;
+        role: "chef" | "rider";
+        name?: string;
+        riderType?: "single" | "company";
+        companyName?: string;
+      };
       if (!body.email || !body.role) {
         return reply.status(400).send({ success: false, error: "Email and role are required fields" });
       }
@@ -262,7 +308,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
       }
 
       try {
-        const result = await createInviteHelper(body.email, body.role);
+        const result = await createInviteHelper(body.email, body.role, {
+          name: body.name,
+          riderType: body.role === "rider" ? body.riderType ?? "single" : undefined,
+          companyName: body.companyName,
+        });
         return reply.status(result.reused ? 200 : 201).send(result);
       } catch (err: any) {
         if (err.status) return reply.status(err.status).send({ success: false, error: err.error, code: err.code });
