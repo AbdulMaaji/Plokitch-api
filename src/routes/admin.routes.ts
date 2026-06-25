@@ -428,7 +428,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     { preHandler: [requireAuth, requireRole("admin")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const adminId = (request as any).session?.user?.id as string;
+      const adminId = (request as any).session?.user?.id ?? null;
 
       const application = await db.query.joinApplication.findFirst({
         where: eq(joinApplication.id, id),
@@ -523,7 +523,7 @@ export async function adminRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const { reason } = (request.body as { reason?: string }) ?? {};
-      const adminId = (request as any).session?.user?.id as string;
+      const adminId = (request as any).session?.user?.id ?? null;
 
       const application = await db.query.joinApplication.findFirst({
         where: eq(joinApplication.id, id),

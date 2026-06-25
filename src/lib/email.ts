@@ -518,3 +518,54 @@ export async function sendRejectionEmail({
     context: "application-rejection",
   });
 }
+
+// ──────────────────────────────────────────────────────────────
+// Contact form message — fired from the public Contact page so the
+// team is notified of an inbound enquiry.
+// ──────────────────────────────────────────────────────────────
+interface SendContactMessageParams {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+}
+
+export async function sendContactMessage({
+  name,
+  email,
+  subject,
+  message,
+}: SendContactMessageParams) {
+  const adminInbox =
+    process.env.ADMIN_ALERT_EMAIL || process.env.EMAIL_REPLY_TO || replyToEmail;
+
+  // Escape angle brackets so user content can't inject markup into the email.
+  const safeMessage = message
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\n/g, "<br>");
+
+  const html = renderShell({
+    title: "New Contact Message",
+    heading: "New Contact Message",
+    intro: `A new message has been submitted through the Plokitch Contact page.`,
+    highlights: [
+      { label: "From", value: name },
+      { label: "Email", value: email },
+      { label: "Subject", value: subject },
+    ],
+    quote: { label: "Message", text: safeMessage },
+    bodyParagraphs: [
+      `Reply directly to <a href="mailto:${email}" style="color: #D4AF37; text-decoration: none;">${email}</a> to respond.`,
+    ],
+    footerNote: "This is an automated internal notification from the Plokitch Contact page.",
+  });
+
+  return dispatchEmail({
+    to: adminInbox,
+    subject: `Contact: ${subject} — ${name}`,
+    html,
+    context: "contact-message",
+  });
+}
