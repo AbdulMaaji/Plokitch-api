@@ -199,6 +199,7 @@ export async function vendorRoutes(fastify: FastifyInstance) {
         deliveryTime: string;
         minOrder: string;
         isActive: boolean;
+        autoDispatch: boolean;
       }>;
 
       // Verify ownership
@@ -233,6 +234,7 @@ export async function vendorRoutes(fastify: FastifyInstance) {
         "deliveryTime",
         "minOrder",
         "isActive",
+        "autoDispatch",
       ];
 
       if (isAdmin) {

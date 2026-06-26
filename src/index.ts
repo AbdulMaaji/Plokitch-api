@@ -17,6 +17,9 @@ import { paymentRoutes } from "./routes/payments.routes.js";
 import { fleetRoutes } from "./routes/fleet.routes.js";
 import { locationRoutes } from "./routes/location.routes.js";
 import { favoriteRoutes } from "./routes/favorites.routes.js";
+import { notificationRoutes } from "./routes/notifications.routes.js";
+import { dispatchRoutes } from "./routes/dispatch.routes.js";
+import { expireStaleOffers } from "./lib/dispatch.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 
 const PORT = parseInt(process.env.PORT ?? "4000");
@@ -151,6 +154,8 @@ await fastify.register(paymentRoutes, { prefix: "/api/payments" });
 await fastify.register(fleetRoutes, { prefix: "/api/fleet" });
 await fastify.register(locationRoutes);
 await fastify.register(favoriteRoutes);
+await fastify.register(notificationRoutes);
+await fastify.register(dispatchRoutes);
 
 // ──────────────────────────────────────────────────────────────
 // 404 handler
@@ -171,6 +176,15 @@ try {
   fastify.log.info(`🍳 Plokitch API running on http://${HOST}:${PORT}`);
   fastify.log.info(`🔐 Auth endpoint: http://${HOST}:${PORT}/api/auth`);
   fastify.log.info(`❤️  Health check: http://${HOST}:${PORT}/health`);
+
+  // Dispatch sweeper: expire stale targeted offers and re-broadcast to the
+  // open pool. Runs every 30s.
+  const dispatchSweeper = setInterval(() => {
+    expireStaleOffers().catch((err) =>
+      fastify.log.error({ err }, "Offer expiry sweep failed")
+    );
+  }, 30_000);
+  dispatchSweeper.unref?.();
 } catch (err) {
   fastify.log.error(err);
   process.exit(1);

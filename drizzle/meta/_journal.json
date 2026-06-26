@@ -22,6 +22,27 @@
       "when": 1782351965201,
       "tag": "0002_flippant_black_bolt",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1782437813233,
+      "tag": "0003_open_bulldozer",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1782438086667,
+      "tag": "0004_many_moon_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1782438411005,
+      "tag": "0005_unique_yellowjacket",
+      "breakpoints": true
     }
   ]
 }

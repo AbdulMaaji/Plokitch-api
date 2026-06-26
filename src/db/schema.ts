@@ -167,6 +167,9 @@ export const vendor = pgTable("vendor", {
   commissionRate: decimal("commission_rate", { precision: 5, scale: 2 }).default("10.00"),
   isActive: boolean("is_active").notNull().default(false),
   isVerified: boolean("is_verified").notNull().default(false),
+  // When true, orders are broadcast to all online riders automatically the
+  // moment they're marked ready (no manual "Dispatch" press required).
+  autoDispatch: boolean("auto_dispatch").notNull().default(false),
   deliveryTime: text("delivery_time").default("30-45 min"),
   minOrder: decimal("min_order", { precision: 10, scale: 2 }).default("0"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -231,12 +234,38 @@ export const order = pgTable("order", {
   deliveryLng: decimal("delivery_lng", { precision: 10, scale: 7 }),
   paymentStatus: text("payment_status").notNull().default("unpaid"),
   paymentRef: text("payment_ref"),
+  // Targeted dispatch offer: while offerExpiresAt is in the future the order is
+  // reserved for offeredRiderId (hidden from the open pool). On expiry/decline
+  // it is broadcast globally to all online riders. dispatchedAt marks when the
+  // order was first broadcast (manual or auto).
+  offeredRiderId: text("offered_rider_id").references(() => user.id),
+  offerExpiresAt: timestamp("offer_expires_at"),
+  dispatchedAt: timestamp("dispatched_at"),
   notes: text("notes"),
   estimatedDelivery: timestamp("estimated_delivery"),
   deliveredAt: timestamp("delivered_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   isPriority: boolean("is_priority").default(false),
+});
+
+// In-app notifications. Persisted for a feed + unread count; realtime delivery
+// is layered on top via Supabase Realtime broadcast on a per-user channel.
+export const notification = pgTable("notification", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  // Recipient (Better Auth user id).
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  // e.g. order_placed | order_status | delivery_offer | offer_expired |
+  // order_assigned | payout. Kept as text so new types don't require migrations.
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  data: jsonb("data").$type<Record<string, unknown>>(),
+  orderId: uuid("order_id").references(() => order.id, { onDelete: "cascade" }),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const review = pgTable("review", {
@@ -298,6 +327,9 @@ export const riderProfile = pgTable("rider_profile", {
   plateNumber: text("plate_number"),
   isAvailable: boolean("is_available").notNull().default(false),
   isVerified: boolean("is_verified").notNull().default(false),
+  // Connection heartbeat: rider is considered "online" only when isAvailable
+  // AND lastSeenAt is within the freshness window (see RIDER_ONLINE_WINDOW_MS).
+  lastSeenAt: timestamp("last_seen_at"),
   currentLocation: jsonb("current_location").$type<{
     lat: number;
     lng: number;
