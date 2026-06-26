@@ -6,6 +6,7 @@ import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
 import { resolveDeliveryFee } from "../lib/pricing.js";
 import { notifyUser } from "../lib/notifications.js";
 import { broadcastOrderToOnlineRiders } from "../lib/dispatch.js";
+import { isGlobalAutoDispatchEnabled } from "../lib/settings.js";
 
 /**
  * Order routes — /api/orders
@@ -278,13 +279,15 @@ export async function orderRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ success: false, error: "Order not found" });
       }
 
-      // Auto-dispatch: if the vendor has it enabled, broadcast to all online
-      // riders the moment the order is marked ready.
+      // Auto-dispatch: broadcast to all online riders the moment the order is
+      // marked ready when EITHER global auto-dispatch is on OR this vendor has
+      // its own auto-dispatch enabled.
       if (body.status === "ready" && !updated.riderId) {
-        const orderVendor = await db.query.vendor.findFirst({
-          where: eq(vendor.id, updated.vendorId),
-        });
-        if (orderVendor?.autoDispatch) {
+        const [orderVendor, globalAuto] = await Promise.all([
+          db.query.vendor.findFirst({ where: eq(vendor.id, updated.vendorId) }),
+          isGlobalAutoDispatchEnabled(),
+        ]);
+        if (globalAuto || orderVendor?.autoDispatch) {
           await db
             .update(order)
             .set({ dispatchedAt: new Date() })

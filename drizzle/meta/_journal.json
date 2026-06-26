@@ -43,6 +43,20 @@
       "when": 1782438411005,
       "tag": "0005_unique_yellowjacket",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1782487123296,
+      "tag": "0006_daily_patriot",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1782489445760,
+      "tag": "0007_magenta_ben_grimm",
+      "breakpoints": true
     }
   ]
 }
