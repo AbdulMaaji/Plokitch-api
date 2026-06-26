@@ -1,9 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/index.js";
 import { order, vendor } from "../db/schema.js";
-import { eq, and, or, inArray, isNull } from "drizzle-orm";
+import { eq, and, or, inArray, isNull, gt, lt } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
 import { resolveDeliveryFee } from "../lib/pricing.js";
+import { notifyUser } from "../lib/notifications.js";
+import { broadcastOrderToOnlineRiders } from "../lib/dispatch.js";
 
 /**
  * Order routes — /api/orders
@@ -59,6 +61,22 @@ export async function orderRoutes(fastify: FastifyInstance) {
         })
         .returning();
 
+      // Notify the vendor owner that a new order has arrived.
+      const orderVendor = await db.query.vendor.findFirst({
+        where: eq(vendor.id, body.vendorId),
+      });
+      if (orderVendor?.userId) {
+        const itemCount = body.items.reduce((n, i) => n + i.quantity, 0);
+        await notifyUser({
+          userId: orderVendor.userId,
+          type: "order_placed",
+          title: "New order received",
+          body: `${itemCount} item${itemCount === 1 ? "" : "s"} · ₦${Number(totalAmount).toLocaleString()}`,
+          orderId: newOrder.id,
+          data: { status: "pending" },
+        });
+      }
+
       return reply.status(201).send({ success: true, data: newOrder });
     }
   );
@@ -68,8 +86,15 @@ export async function orderRoutes(fastify: FastifyInstance) {
     "/api/orders/available",
     { preHandler: [requireAuth, requireRole("rider")] },
     async (request, reply) => {
+      const now = new Date();
+      // Open pool = ready, unassigned, and NOT currently reserved by a live
+      // targeted offer to a specific rider.
       const orders = await db.query.order.findMany({
-        where: and(eq(order.status, "ready"), isNull(order.riderId)),
+        where: and(
+          eq(order.status, "ready"),
+          isNull(order.riderId),
+          or(isNull(order.offerExpiresAt), lt(order.offerExpiresAt, now))
+        ),
         with: { customer: true, vendor: true },
         orderBy: (o, { desc }) => [desc(o.createdAt)],
       });
@@ -216,6 +241,24 @@ export async function orderRoutes(fastify: FastifyInstance) {
             code: "RIDER_BUSY",
           });
         }
+
+        // A rider self-picking can't grab an order that is currently reserved by
+        // a live targeted offer to someone else.
+        if (body.status === "picking") {
+          const target = await db.query.order.findFirst({ where: eq(order.id, id) });
+          const reserved =
+            target?.offeredRiderId &&
+            target.offerExpiresAt &&
+            new Date(target.offerExpiresAt).getTime() > Date.now() &&
+            target.offeredRiderId !== riderId;
+          if (reserved) {
+            return reply.status(409).send({
+              success: false,
+              error: "This delivery is reserved for another rider right now.",
+              code: "ORDER_RESERVED",
+            });
+          }
+        }
       }
 
       const [updated] = await db
@@ -223,6 +266,8 @@ export async function orderRoutes(fastify: FastifyInstance) {
         .set({
           status: body.status,
           ...(body.riderId && { riderId: body.riderId }),
+          // Once a rider takes the order, clear any standing offer reservation.
+          ...(body.status === "picking" && { offeredRiderId: null, offerExpiresAt: null }),
           ...(body.status === "completed" && { deliveredAt: new Date() }),
           updatedAt: new Date(),
         })
@@ -231,6 +276,42 @@ export async function orderRoutes(fastify: FastifyInstance) {
 
       if (!updated) {
         return reply.status(404).send({ success: false, error: "Order not found" });
+      }
+
+      // Auto-dispatch: if the vendor has it enabled, broadcast to all online
+      // riders the moment the order is marked ready.
+      if (body.status === "ready" && !updated.riderId) {
+        const orderVendor = await db.query.vendor.findFirst({
+          where: eq(vendor.id, updated.vendorId),
+        });
+        if (orderVendor?.autoDispatch) {
+          await db
+            .update(order)
+            .set({ dispatchedAt: new Date() })
+            .where(eq(order.id, updated.id));
+          await broadcastOrderToOnlineRiders(updated);
+        }
+      }
+
+      // Keep the customer informed in realtime as the order advances.
+      const customerMessage: Record<string, string> = {
+        confirmed: "Your order was confirmed by the kitchen.",
+        preparing: "Your order is being prepared.",
+        ready: "Your order is ready and waiting for a rider.",
+        picking: "A rider is heading to the kitchen for your order.",
+        delivering: "Your order is on the way!",
+        completed: "Your order has been delivered. Enjoy!",
+        cancelled: "Your order was cancelled.",
+      };
+      if (updated.customerId && customerMessage[body.status]) {
+        await notifyUser({
+          userId: updated.customerId,
+          type: "order_status",
+          title: "Order update",
+          body: customerMessage[body.status],
+          orderId: updated.id,
+          data: { status: body.status },
+        });
       }
 
       return reply.send({ success: true, data: updated });
