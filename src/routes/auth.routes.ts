@@ -147,13 +147,16 @@ export async function authRoutes(fastify: FastifyInstance) {
           isVerified: false,
         });
       } else if (inviteRecord.role === "rider") {
+        // A companyId on the invite means this rider belongs to a fleet.
+        const isCompanyRider = !!inviteRecord.companyId;
         await db.insert(riderProfile).values({
           userId,
           isAvailable: false,
           isVerified: false,
           // Riders onboarded through the admin invite flow are pre-approved,
           // so the new application-gating model doesn't lock them out.
-          riderType: "single",
+          riderType: isCompanyRider ? "company" : "single",
+          companyId: inviteRecord.companyId ?? null,
           applicationStatus: "approved",
           approvedAt: new Date(),
         });

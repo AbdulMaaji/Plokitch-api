@@ -132,9 +132,22 @@ export const invite = pgTable("invite", {
   role: text("role").notNull(),
   token: text("token").notNull().unique(),
   status: text("status").notNull().default("active"),
+  // For fleet sub-rider invites: the company this rider will belong to. When
+  // set on a role="rider" invite, accept-invite creates a company sub-rider.
+  companyId: uuid("company_id").references(() => deliveryCompany.id, {
+    onDelete: "cascade",
+  }),
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Platform-wide key/value settings (singleton-style flags). e.g.
+// key "auto_dispatch" → { enabled: boolean } for global auto-dispatch.
+export const appSetting = pgTable("app_setting", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<Record<string, unknown>>(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 
