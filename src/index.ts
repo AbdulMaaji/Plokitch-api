@@ -19,6 +19,7 @@ import { locationRoutes } from "./routes/location.routes.js";
 import { favoriteRoutes } from "./routes/favorites.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
 import { dispatchRoutes } from "./routes/dispatch.routes.js";
+import { walletRoutes } from "./routes/wallet.routes.js";
 import { expireStaleOffers } from "./lib/dispatch.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 
@@ -156,6 +157,7 @@ await fastify.register(locationRoutes);
 await fastify.register(favoriteRoutes);
 await fastify.register(notificationRoutes);
 await fastify.register(dispatchRoutes);
+await fastify.register(walletRoutes);
 
 // ──────────────────────────────────────────────────────────────
 // 404 handler
