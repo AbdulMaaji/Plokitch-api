@@ -13,7 +13,8 @@
     "db:repair": "tsx scripts/repair-schema.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "auth:generate": "npx auth@latest generate --config src/lib/auth.ts"
+    "auth:generate": "npx auth@latest generate --config src/lib/auth.ts",
+    "db:seed-admin": "tsx src/db/seed-admin.ts"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",
