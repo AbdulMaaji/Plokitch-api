@@ -219,12 +219,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       return reply.send({
         success: true,
         role: inviteRecord.role,
-        redirectTo:
-          inviteRecord.role === "chef"
-            ? "/chef"
-            : inviteRecord.role === "company"
-              ? "/fleet"
-              : "/rider",
+        redirectTo: "/download?onboarded=1",
       });
     } catch (err: any) {
       fastify.log.error(err, "CRITICAL Accept invite processing error");
