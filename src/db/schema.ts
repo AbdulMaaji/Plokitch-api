@@ -58,6 +58,26 @@ export const applicantTypeEnum = pgEnum("applicant_type", [
   "delivery_company",
 ]);
 
+// Wallet / ledger / payout enums
+export const ledgerTypeEnum = pgEnum("ledger_type", ["credit", "debit"]);
+
+export const ledgerCategoryEnum = pgEnum("ledger_category", [
+  "delivery_earning", // rider earns the delivery fee on completion
+  "order_revenue", // vendor earns item revenue (net of commission) on completion
+  "commission", // platform commission deducted (informational)
+  "payout", // funds withdrawn to a bank account
+  "payout_reversal", // a failed/rejected payout returned to the wallet
+  "adjustment", // manual admin correction
+]);
+
+export const payoutStatusEnum = pgEnum("payout_status", [
+  "pending", // requested, awaiting admin/processor
+  "processing", // submitted to Paystack transfer
+  "paid", // settled successfully
+  "failed", // could not be settled (wallet re-credited)
+  "cancelled", // withdrawn by the requester before processing
+]);
+
 // ──────────────────────────────────────────────────────────────
 // Better Auth Core Tables
 // (better-auth will manage these via its CLI / adapter)
@@ -422,6 +442,88 @@ export const joinApplication = pgTable("join_application", {
   reviewedBy: text("reviewed_by").references(() => user.id),
   rejectionReason: text("rejection_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ──────────────────────────────────────────────────────────────
+// Wallet / Ledger / Payouts
+// ──────────────────────────────────────────────────────────────
+
+// One wallet per earning user (rider, vendor/chef, or fleet owner).
+export const wallet = pgTable("wallet", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  // Available-to-withdraw balance.
+  balance: decimal("balance", { precision: 12, scale: 2 }).notNull().default("0"),
+  // Lifetime gross credited (for reporting).
+  totalEarned: decimal("total_earned", { precision: 12, scale: 2 }).notNull().default("0"),
+  currency: text("currency").notNull().default("NGN"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Append-only ledger of every wallet movement.
+export const ledgerEntry = pgTable("ledger_entry", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  walletId: uuid("wallet_id")
+    .notNull()
+    .references(() => wallet.id, { onDelete: "cascade" }),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  type: ledgerTypeEnum("type").notNull(),
+  category: ledgerCategoryEnum("category").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  // Wallet balance immediately after this entry was applied.
+  balanceAfter: decimal("balance_after", { precision: 12, scale: 2 }).notNull(),
+  orderId: uuid("order_id").references(() => order.id, { onDelete: "set null" }),
+  payoutId: uuid("payout_id"),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// A saved bank destination for payouts (Paystack transfer recipient).
+export const transferRecipient = pgTable("transfer_recipient", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  bankName: text("bank_name").notNull(),
+  bankCode: text("bank_code").notNull(),
+  accountNumber: text("account_number").notNull(),
+  accountName: text("account_name").notNull(),
+  // Paystack recipient code (RCP_...), null until/if created remotely.
+  paystackRecipientCode: text("paystack_recipient_code"),
+  isDefault: boolean("is_default").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// A withdrawal of wallet funds to a transfer recipient.
+export const payout = pgTable("payout", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  walletId: uuid("wallet_id")
+    .notNull()
+    .references(() => wallet.id, { onDelete: "cascade" }),
+  transferRecipientId: uuid("transfer_recipient_id").references(() => transferRecipient.id, {
+    onDelete: "set null",
+  }),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  status: payoutStatusEnum("status").notNull().default("pending"),
+  reference: text("reference").notNull().unique(),
+  paystackTransferCode: text("paystack_transfer_code"),
+  failureReason: text("failure_reason"),
+  // Snapshot of the destination so history survives recipient deletion.
+  destinationBankName: text("destination_bank_name"),
+  destinationAccountNumber: text("destination_account_number"),
+  destinationAccountName: text("destination_account_name"),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // ──────────────────────────────────────────────────────────────

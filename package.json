@@ -10,6 +10,7 @@
     "start": "node dist/index.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
+    "db:repair": "tsx scripts/repair-schema.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "auth:generate": "npx auth@latest generate --config src/lib/auth.ts"

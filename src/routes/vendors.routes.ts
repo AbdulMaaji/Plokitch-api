@@ -27,9 +27,9 @@ export async function vendorRoutes(fastify: FastifyInstance) {
       .leftJoin(order, eq(vendor.id, order.vendorId))
       .where(eq(vendor.isActive, true))
       .groupBy(vendor.id)
+      .orderBy(sql`${vendor.rating} DESC`)
       .limit(limit)
-      .offset(offset)
-      .orderBy(sql`${vendor.rating} DESC`);
+      .offset(offset);
 
     // Fetch related data for each vendor (drizzle query builder style doesn't support complex aggregations easily in one go)
     const vendorsWithData = await Promise.all(

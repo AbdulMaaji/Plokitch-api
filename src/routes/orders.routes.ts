@@ -7,6 +7,7 @@ import { resolveDeliveryFee } from "../lib/pricing.js";
 import { notifyUser } from "../lib/notifications.js";
 import { broadcastOrderToOnlineRiders } from "../lib/dispatch.js";
 import { isGlobalAutoDispatchEnabled } from "../lib/settings.js";
+import { creditWallet } from "../lib/wallet.js";
 
 /**
  * Order routes — /api/orders
@@ -262,6 +263,16 @@ export async function orderRoutes(fastify: FastifyInstance) {
         }
       }
 
+      // Guard against double-crediting if an order is marked completed twice.
+      let alreadyCompleted = false;
+      if (body.status === "completed") {
+        const prior = await db.query.order.findFirst({
+          where: eq(order.id, id),
+          columns: { status: true },
+        });
+        alreadyCompleted = prior?.status === "completed";
+      }
+
       const [updated] = await db
         .update(order)
         .set({
@@ -277,6 +288,42 @@ export async function orderRoutes(fastify: FastifyInstance) {
 
       if (!updated) {
         return reply.status(404).send({ success: false, error: "Order not found" });
+      }
+
+      // On first completion of a PAID order, settle earnings into wallets:
+      //   • rider  ← the delivery fee
+      //   • vendor ← item revenue net of platform commission
+      if (body.status === "completed" && !alreadyCompleted && updated.paymentStatus === "paid") {
+        try {
+          const deliveryFee = Number(updated.deliveryFee ?? 0);
+          if (updated.riderId && deliveryFee > 0) {
+            await creditWallet(updated.riderId, {
+              amount: deliveryFee,
+              category: "delivery_earning",
+              orderId: updated.id,
+              description: "Delivery fee earned",
+            });
+          }
+
+          const orderVendor = await db.query.vendor.findFirst({
+            where: eq(vendor.id, updated.vendorId),
+          });
+          if (orderVendor?.userId) {
+            const itemsRevenue = Number(updated.totalAmount) - deliveryFee;
+            const commissionRate = Number(orderVendor.commissionRate ?? 0);
+            const vendorEarning = Math.max(0, itemsRevenue * (1 - commissionRate / 100));
+            if (vendorEarning > 0) {
+              await creditWallet(orderVendor.userId, {
+                amount: Number(vendorEarning.toFixed(2)),
+                category: "order_revenue",
+                orderId: updated.id,
+                description: `Order revenue (net of ${commissionRate}% commission)`,
+              });
+            }
+          }
+        } catch (err) {
+          fastify.log.error(err, "Failed to settle wallet earnings on order completion");
+        }
       }
 
       // Auto-dispatch: broadcast to all online riders the moment the order is
