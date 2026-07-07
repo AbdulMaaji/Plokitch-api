@@ -457,7 +457,7 @@ export async function sendNewApplicationAlert({
   if (location) highlights.push({ label: "Location", value: location });
 
   const dashboardUrl = process.env.DASHBOARD_URL || "http://localhost:3000";
-  const reviewLink = `${dashboardUrl}/admin/dashboard/applications`;
+  const reviewLink = `${dashboardUrl}/dashboard/applications`;
 
   const html = renderShell({
     title: "New Plokitch Application",
