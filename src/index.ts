@@ -18,7 +18,7 @@ import { contactRoutes } from "./routes/contact.routes.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 
 const PORT = parseInt(process.env.PORT ?? "4000");
-const HOST = process.env.HOST ?? "0.0.0.0";
+const HOST = process.env.HOST ?? "::";
 
 // ──────────────────────────────────────────────────────────────
 // Create Fastify instance
