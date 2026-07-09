@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { notification } from "../db/schema.js";
 import { and, eq, isNull, desc } from "drizzle-orm";
 import { requireAuth } from "../middleware/auth.middleware.js";
+import { notifyUser } from "../lib/notifications.js";
 
 /**
  * Notification routes — /api/notifications
@@ -72,6 +73,29 @@ export async function notificationRoutes(fastify: FastifyInstance) {
         .where(and(eq(notification.userId, session.user.id), isNull(notification.readAt)));
 
       return reply.send({ success: true });
+    }
+  );
+
+  // POST /api/notifications — create a new notification
+  fastify.post(
+    "/api/notifications",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const session = (request as any).session;
+      const { title, message, type } = request.body as {
+        title: string;
+        message: string;
+        type?: string;
+      };
+
+      const row = await notifyUser({
+        userId: session.user.id,
+        title,
+        body: message,
+        type: type ?? "system",
+      });
+
+      return reply.send({ success: true, data: row });
     }
   );
 }
