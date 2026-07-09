@@ -1,8 +1,11 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { bearer } from "better-auth/plugins";
+import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
+import { sendLoginAlertEmail } from "./email.js";
+import { notifyUser } from "./notifications.js";
 
 if (!process.env.BETTER_AUTH_SECRET) {
   throw new Error("BETTER_AUTH_SECRET is not set in environment variables");
@@ -78,6 +81,11 @@ export const auth = betterAuth({
         type: "boolean",
         required: false,
         input: true,
+      },
+      loginNotificationsEnabled: {
+        type: "boolean",
+        required: false,
+        input: true,
       }
     },
   },
@@ -101,6 +109,49 @@ export const auth = betterAuth({
     crossSubdomainCookies: {
       enabled: process.env.NODE_ENV === "production",
       domain: "plokitch.app",
+    },
+  },
+
+  // ── Database Hooks ────────────────────────────────────────
+  databaseHooks: {
+    session: {
+      create: {
+        after: async (session) => {
+          try {
+            const userData = await db.query.user.findFirst({
+              where: eq(schema.user.id, session.userId),
+            });
+
+            if (userData && userData.loginNotificationsEnabled) {
+              // 1. Send email notification
+              try {
+                await sendLoginAlertEmail({
+                  email: userData.email,
+                  name: userData.name,
+                  ipAddress: session.ipAddress ?? undefined,
+                  userAgent: session.userAgent ?? undefined,
+                });
+              } catch (err) {
+                console.error("[Auth Hook] Failed to send login alert email:", err);
+              }
+
+              // 2. Create in-app notification
+              try {
+                await notifyUser({
+                  userId: userData.id,
+                  type: "system",
+                  title: "Login Alert",
+                  body: "You successfully logged into your account.",
+                });
+              } catch (err) {
+                console.error("[Auth Hook] Failed to create login in-app notification:", err);
+              }
+            }
+          } catch (err) {
+            console.error("[Auth Hook] Error in session create hook:", err);
+          }
+        },
+      },
     },
   },
 });

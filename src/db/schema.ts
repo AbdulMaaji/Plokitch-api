@@ -104,6 +104,7 @@ export const user = pgTable("user", {
   }>(),
   pushNotificationsEnabled: boolean("push_notifications_enabled").notNull().default(true),
   marketingEmailsEnabled: boolean("marketing_emails_enabled").notNull().default(false),
+  loginNotificationsEnabled: boolean("login_notifications_enabled").notNull().default(true),
 });
 
 export const session = pgTable("session", {

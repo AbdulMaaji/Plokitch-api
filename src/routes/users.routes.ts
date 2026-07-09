@@ -26,6 +26,9 @@ export async function userRoutes(fastify: FastifyInstance) {
           address: true,
           isActive: true,
           createdAt: true,
+          pushNotificationsEnabled: true,
+          marketingEmailsEnabled: true,
+          loginNotificationsEnabled: true,
         },
       });
 
@@ -48,7 +51,17 @@ export async function userRoutes(fastify: FastifyInstance) {
         phone?: string; 
         image?: string;
         address?: any;
+        pushNotificationsEnabled?: boolean;
+        push_notifications_enabled?: boolean;
+        marketingEmailsEnabled?: boolean;
+        marketing_emails_enabled?: boolean;
+        loginNotificationsEnabled?: boolean;
+        login_notifications_enabled?: boolean;
       };
+
+      const pushVal = body.pushNotificationsEnabled ?? body.push_notifications_enabled;
+      const marketingVal = body.marketingEmailsEnabled ?? body.marketing_emails_enabled;
+      const loginVal = body.loginNotificationsEnabled ?? body.login_notifications_enabled;
 
       const updated = await db
         .update(user)
@@ -57,6 +70,9 @@ export async function userRoutes(fastify: FastifyInstance) {
           ...(body.phone !== undefined && { phone: body.phone }),
           ...(body.image !== undefined && { image: body.image }),
           ...(body.address !== undefined && { address: body.address }),
+          ...(pushVal !== undefined && { pushNotificationsEnabled: pushVal }),
+          ...(marketingVal !== undefined && { marketingEmailsEnabled: marketingVal }),
+          ...(loginVal !== undefined && { loginNotificationsEnabled: loginVal }),
           updatedAt: new Date(),
         })
         .where(eq(user.id, session.user.id))
@@ -68,6 +84,9 @@ export async function userRoutes(fastify: FastifyInstance) {
           phone: user.phone,
           image: user.image,
           address: user.address,
+          pushNotificationsEnabled: user.pushNotificationsEnabled,
+          marketingEmailsEnabled: user.marketingEmailsEnabled,
+          loginNotificationsEnabled: user.loginNotificationsEnabled,
         });
 
       return reply.send({ success: true, data: updated[0] });

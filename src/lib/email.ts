@@ -569,3 +569,49 @@ export async function sendContactMessage({
     context: "contact-message",
   });
 }
+
+export async function sendLoginAlertEmail({
+  email,
+  name,
+  ipAddress,
+  userAgent,
+}: {
+  email: string;
+  name: string;
+  ipAddress?: string;
+  userAgent?: string;
+}) {
+  const greeting = name ? `Hello ${name},` : "Hello,";
+  const timeStr = new Date().toLocaleString();
+
+  const highlights = [
+    { label: "Account Email", value: email },
+    { label: "Date & Time", value: timeStr },
+  ];
+  if (ipAddress) {
+    highlights.push({ label: "IP Address", value: ipAddress });
+  }
+  if (userAgent) {
+    highlights.push({ label: "Device/Browser", value: userAgent });
+  }
+
+  const html = renderShell({
+    title: "New Login Detected",
+    heading: "Security Alert: Login Detected",
+    intro: `${greeting} a new sign-in was detected for your Plokitch account.`,
+    highlights,
+    bodyParagraphs: [
+      "If this was you, you can safely ignore this email. No further action is required.",
+      "If you do not recognize this login activity, please secure your account immediately or contact support.",
+    ],
+    footerNote: "This is an automated security notification from the Plokitch platform.",
+  });
+
+  return dispatchEmail({
+    to: email,
+    subject: "Security Alert: New Sign-in to your Plokitch Account",
+    html,
+    context: "login-alert",
+  });
+}
+
