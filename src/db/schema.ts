@@ -227,6 +227,7 @@ export const menuItem = pgTable("menu_item", {
   rating: decimal("rating", { precision: 3, scale: 2 }).default("0.00"),
   isAvailable: boolean("is_available").notNull().default(true),
   isFeatured: boolean("is_featured").notNull().default(false),
+  isAddOn: boolean("is_add_on").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

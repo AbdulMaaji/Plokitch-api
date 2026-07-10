@@ -297,6 +297,8 @@ export async function vendorRoutes(fastify: FastifyInstance) {
         ingredients?: string[];
         prepTime?: string;
         tag?: string;
+        isAvailable?: boolean;
+        isAddOn?: boolean;
       };
 
       // Verify ownership
@@ -324,6 +326,8 @@ export async function vendorRoutes(fastify: FastifyInstance) {
           ingredients: body.ingredients ?? [],
           prepTime: body.prepTime,
           tag: body.tag,
+          isAvailable: body.isAvailable ?? true,
+          isAddOn: body.isAddOn ?? false,
         })
         .returning();
 

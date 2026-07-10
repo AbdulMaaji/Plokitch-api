@@ -64,6 +64,13 @@
       "when": 1782494722731,
       "tag": "0008_silly_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783662418694,
+      "tag": "0009_add_is_add_on",
+      "breakpoints": true
     }
   ]
 }
