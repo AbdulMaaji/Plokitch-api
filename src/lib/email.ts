@@ -496,12 +496,16 @@ export async function sendOrderCancelledEmail({
   order,
   vendorName,
   vendorEmail,
+  customerName,
+  customerEmail,
   riderName,
   riderEmail,
 }: {
   order: OrderDetails;
   vendorName: string;
   vendorEmail: string;
+  customerName?: string;
+  customerEmail?: string;
   riderName?: string;
   riderEmail?: string;
 }) {
@@ -514,6 +518,18 @@ export async function sendOrderCancelledEmail({
   });
 
   const tasks: Promise<any>[] = [dispatchEmail({ to: vendorEmail, subject: `Order cancelled — ${order.id}`, html: vendorHtml, context: "order-cancelled-vendor" })];
+
+  if (customerEmail) {
+    const customerHtml = renderShell({
+      title: "Order Cancelled",
+      heading: "Your Order Has Been Cancelled",
+      intro: `Hi ${customerName ?? "Customer"},`,
+      bodyParagraphs: ["Your order has been cancelled. If you have any questions, please contact the kitchen directly.", buildOrderSummarySection(order)],
+      footerNote: "Order cancellation notification.",
+    });
+
+    tasks.push(dispatchEmail({ to: customerEmail, subject: `Order cancelled — ${order.id}`, html: customerHtml, context: "order-cancelled-customer" }));
+  }
 
   if (riderEmail) {
     const riderHtml = renderShell({

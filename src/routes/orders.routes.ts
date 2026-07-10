@@ -559,6 +559,8 @@ export async function orderRoutes(fastify: FastifyInstance) {
                   order: orderWithRelations as any,
                   vendorName,
                   vendorEmail,
+                  customerName,
+                  customerEmail,
                   riderName,
                   riderEmail,
                 })

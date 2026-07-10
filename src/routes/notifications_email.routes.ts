@@ -74,11 +74,13 @@ export async function notificationEmailRoutes(fastify: FastifyInstance) {
           break;
 
         case "order_cancelled":
-          // payload: { order, vendorName, vendorEmail, riderName?, riderEmail? }
+          // payload: { order, vendorName, vendorEmail, customerName?, customerEmail?, riderName?, riderEmail? }
           await sendOrderCancelledEmail({
             order: payload.order,
             vendorName: payload.vendorName,
             vendorEmail: payload.vendorEmail,
+            customerName: payload.customerName,
+            customerEmail: payload.customerEmail,
             riderName: payload.riderName,
             riderEmail: payload.riderEmail,
           });
