@@ -46,8 +46,24 @@ export async function requireAuth(
       code: "UNAUTHORIZED",
     });
   }
-  // Attach to request for downstream handlers
-  (request as any).session = session;
+  
+  // If the authenticated user is an admin, allow overriding the active role via header
+  const user = session.user as any;
+  if (user && user.role === "admin") {
+    const headerRole = request.headers["x-admin-active-role"] as string;
+    if (headerRole === "customer" || headerRole === "chef" || headerRole === "rider") {
+      const overriddenUser = { ...session.user, role: headerRole };
+      (request as any).session = {
+        ...session,
+        user: overriddenUser,
+      };
+    } else {
+      (request as any).session = session;
+    }
+  } else {
+    // Attach to request for downstream handlers
+    (request as any).session = session;
+  }
 }
 
 /**
