@@ -261,8 +261,11 @@ export async function orderRoutes(fastify: FastifyInstance) {
  
       fastify.log.info({ id, body }, "Updating order status");
 
+      // Normalize status to lowercase for consistent comparisons
+      const normalizedStatus = body.status?.toLowerCase() as string;
+
       // Constraint: Rider can only have one active delivery
-      if (body.status === "picking" || body.status === "delivering") {
+      if (normalizedStatus === "picking" || normalizedStatus === "delivering") {
         const riderId = body.riderId || session.user.id;
         const activeOrder = await db.query.order.findFirst({
           where: and(
@@ -281,7 +284,7 @@ export async function orderRoutes(fastify: FastifyInstance) {
 
         // A rider self-picking can't grab an order that is currently reserved by
         // a live targeted offer to someone else.
-        if (body.status === "picking") {
+        if (normalizedStatus === "picking") {
           const target = await db.query.order.findFirst({ where: eq(order.id, id) });
           const reserved =
             target?.offeredRiderId &&
@@ -300,7 +303,7 @@ export async function orderRoutes(fastify: FastifyInstance) {
 
       // Guard against double-crediting if an order is marked completed twice.
       let alreadyCompleted = false;
-      if (body.status === "completed") {
+      if (normalizedStatus === "completed") {
         const prior = await db.query.order.findFirst({
           where: eq(order.id, id),
           columns: { status: true },
@@ -311,11 +314,11 @@ export async function orderRoutes(fastify: FastifyInstance) {
       const [updated] = await db
         .update(order)
         .set({
-          status: body.status,
+          status: normalizedStatus as any,
           ...(body.riderId && { riderId: body.riderId }),
           // Once a rider takes the order, clear any standing offer reservation.
-          ...(body.status === "picking" && { offeredRiderId: null, offerExpiresAt: null }),
-          ...(body.status === "completed" && { deliveredAt: new Date() }),
+          ...(normalizedStatus === "picking" && { offeredRiderId: null, offerExpiresAt: null }),
+          ...(normalizedStatus === "completed" && { deliveredAt: new Date() }),
           updatedAt: new Date(),
         })
         .where(eq(order.id, id))
@@ -328,7 +331,7 @@ export async function orderRoutes(fastify: FastifyInstance) {
       // On first completion of a PAID order, settle earnings into wallets:
       //   • rider  ← the delivery fee
       //   • vendor ← item revenue net of platform commission
-      if (body.status === "completed" && !alreadyCompleted && updated.paymentStatus === "paid") {
+      if (normalizedStatus === "completed" && !alreadyCompleted && updated.paymentStatus === "paid") {
         try {
           const deliveryFee = Number(updated.deliveryFee ?? 0);
           if (updated.riderId && deliveryFee > 0) {
@@ -364,7 +367,7 @@ export async function orderRoutes(fastify: FastifyInstance) {
       // Auto-dispatch: broadcast to all online riders the moment the order is
       // marked ready when EITHER global auto-dispatch is on OR this vendor has
       // its own auto-dispatch enabled.
-      if (body.status === "ready" && !updated.riderId) {
+      if (normalizedStatus === "ready" && !updated.riderId) {
         const [orderVendor, globalAuto] = await Promise.all([
           db.query.vendor.findFirst({ where: eq(vendor.id, updated.vendorId) }),
           isGlobalAutoDispatchEnabled(),
@@ -517,7 +520,7 @@ export async function orderRoutes(fastify: FastifyInstance) {
 
           const emailTasks: Promise<any>[] = [];
 
-          if (body.status === "delivering") {
+          if (normalizedStatus === "delivering") {
             if (customerEmail) {
               emailTasks.push(
                 sendOrderDeliveringEmail({
@@ -531,7 +534,7 @@ export async function orderRoutes(fastify: FastifyInstance) {
             }
           }
 
-          if (body.status === "completed") {
+          if (normalizedStatus === "completed") {
             if (customerEmail && vendorEmail) {
               emailTasks.push(
                 sendOrderCompletedEmail({
@@ -552,7 +555,7 @@ export async function orderRoutes(fastify: FastifyInstance) {
             }
           }
 
-          if (body.status === "cancelled") {
+          if (normalizedStatus === "cancelled") {
             if (vendorEmail) {
               emailTasks.push(
                 sendOrderCancelledEmail({
