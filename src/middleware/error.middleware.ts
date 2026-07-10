@@ -25,14 +25,26 @@ export function errorHandler(
     });
   }
 
-  const message =
-    process.env.NODE_ENV === "production" && statusCode === 500
-      ? "Internal Server Error"
-      : error.message;
+  // Friendly messages for common failure modes.
+  // Avoid exposing raw DB or stack details to clients.
+  let clientMessage = "Something went wrong. Please try again.";
 
+  // Database connection / network issues
+  const lower = (error.message || "").toLowerCase();
+  if (lower.includes("connect") || lower.includes("econnrefused") || lower.includes("timeout")) {
+    clientMessage = "Temporary database connection issue. Please try again later.";
+  } else if (statusCode === 404) {
+    clientMessage = "Not found.";
+  } else if (statusCode === 403) {
+    clientMessage = "Forbidden.";
+  } else if (statusCode === 400) {
+    clientMessage = "Bad request.";
+  }
+
+  // Log full error server-side; send simple messages to client.
   return reply.status(statusCode).send({
     success: false,
-    error: message,
-    code: statusCode === 404 ? "NOT_FOUND" : "SERVER_ERROR",
+    error: clientMessage,
+    code: statusCode === 404 ? "NOT_FOUND" : statusCode === 400 ? "BAD_REQUEST" : "SERVER_ERROR",
   });
 }

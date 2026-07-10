@@ -221,6 +221,7 @@ export const menuItem = pgTable("menu_item", {
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
   category: menuCategoryEnum("category").notNull().default("mains"),
   imageUrl: text("image_url"),
+  imageUrls: jsonb("image_urls").$type<string[]>().default([]),
   ingredients: jsonb("ingredients").$type<string[]>().default([]),
   prepTime: text("prep_time"),
   tag: text("tag"),

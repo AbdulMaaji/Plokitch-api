@@ -49,6 +49,8 @@ const fastify = Fastify({
 // NOTE: Hardened production security: Helmet & Rate-Limiting active
 // ──────────────────────────────────────────────────────────────
 await fastify.register(fastifySensible);
+// Multipart support for image uploads
+await fastify.register(await import('@fastify/multipart'));
 await fastify.register(fastifyHelmet, {
   contentSecurityPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" },

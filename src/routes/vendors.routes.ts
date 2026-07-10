@@ -294,6 +294,7 @@ export async function vendorRoutes(fastify: FastifyInstance) {
         price: string;
         category?: "mains" | "sides" | "desserts" | "drinks" | "starters" | "specials";
         imageUrl?: string;
+        imageUrls?: string[];
         ingredients?: string[];
         prepTime?: string;
         tag?: string;
@@ -323,6 +324,7 @@ export async function vendorRoutes(fastify: FastifyInstance) {
           price: body.price,
           category: body.category ?? "mains",
           imageUrl: body.imageUrl,
+          imageUrls: body.imageUrls ?? [],
           ingredients: body.ingredients ?? [],
           prepTime: body.prepTime,
           tag: body.tag,
@@ -332,6 +334,76 @@ export async function vendorRoutes(fastify: FastifyInstance) {
         .returning();
 
       return reply.status(201).send({ success: true, data: newItem });
+    }
+  );
+
+  // POST /api/vendors/:vendorId/menu/:itemId/images — upload one or more images
+  fastify.post(
+    "/api/vendors/:vendorId/menu/:itemId/images",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const session = (request as any).session;
+      const { vendorId, itemId } = request.params as { vendorId: string; itemId: string };
+
+      // Verify ownership
+      const vendorData = await db.query.vendor.findFirst({ where: eq(vendor.id, vendorId) });
+      if (!vendorData || vendorData.userId !== session.user.id) {
+        return reply.status(403).send({ success: false, error: "Forbidden" });
+      }
+
+      // Ensure item exists
+      const targetItem = await db.query.menuItem.findFirst({ where: eq(menuItem.id, itemId) });
+      if (!targetItem) return reply.status(404).send({ success: false, error: "Menu item not found" });
+
+      // Accept multipart files
+      try {
+        const uploadedUrls: string[] = [];
+        // helper to read stream to buffer
+        async function streamToBuffer(stream: any) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          return Buffer.concat(chunks);
+        }
+
+        // `request.files()` is an async iterator provided by @fastify/multipart
+        const filesIter = (request as any).files ? (request as any).files() : null;
+        if (!filesIter) {
+          return reply.status(400).send({ success: false, error: "No files provided" });
+        }
+
+        for await (const part of filesIter) {
+          // part has: filename, mimetype, file (stream)
+          if (!part || !part.filename) continue;
+          const buffer = part.toBuffer ? await part.toBuffer() : await streamToBuffer(part.file);
+          const path = `dishes/${vendorId}/${itemId}/${Date.now()}_${part.filename}`;
+          const { supabase } = await import("../lib/supabase.js");
+          const { error: uploadErr } = await supabase.storage.from("dishes").upload(path, buffer, {
+            contentType: part.mimetype || "application/octet-stream",
+            upsert: false,
+          });
+          if (uploadErr) {
+            request.log.error({ err: uploadErr }, "Supabase upload failed");
+            return reply.status(500).send({ success: false, error: "Could not upload images. Try again later." });
+          }
+
+          const publicUrl = supabase.storage.from("dishes").getPublicUrl(path).data.publicUrl;
+          if (publicUrl) uploadedUrls.push(publicUrl);
+        }
+
+        if (uploadedUrls.length === 0) {
+          return reply.status(400).send({ success: false, error: "No images uploaded" });
+        }
+
+        // Persist URLs to menu item image_urls column (append)
+        const existing = targetItem.imageUrls ?? [];
+        const newUrls = existing.concat(uploadedUrls);
+        const [updated] = await db.update(menuItem).set({ imageUrls: newUrls, updatedAt: new Date() }).where(eq(menuItem.id, itemId)).returning();
+
+        return reply.send({ success: true, data: updated });
+      } catch (err) {
+        request.log.error(err, "Image upload error");
+        return reply.status(500).send({ success: false, error: "Could not upload images. Try again later." });
+      }
     }
   );
 
@@ -351,6 +423,7 @@ export async function vendorRoutes(fastify: FastifyInstance) {
         price: string;
         category: string;
         imageUrl: string;
+        imageUrls: string[];
         ingredients: string[];
         prepTime: string;
         tag: string;
