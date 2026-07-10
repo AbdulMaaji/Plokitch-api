@@ -12,6 +12,8 @@ import {
   sendNewOrderVendorEmail,
   sendOrderCompletedEmail,
   sendOrderDeliveringEmail,
+  sendOrderPreparingEmail,
+  sendOrderReadyEmail,
   sendOrderReceiptEmail,
   sendOrderCancelledEmail,
 } from "../lib/email.js";
@@ -519,6 +521,32 @@ export async function orderRoutes(fastify: FastifyInstance) {
           const vendorName = vendorWithUser?.businessName ?? orderWithRelations.vendor.businessName;
 
           const emailTasks: Promise<any>[] = [];
+
+          if (normalizedStatus === "preparing") {
+            if (customerEmail) {
+              emailTasks.push(
+                sendOrderPreparingEmail({
+                  order: orderWithRelations as any,
+                  customerName,
+                  customerEmail,
+                  vendorName,
+                })
+              );
+            }
+          }
+
+          if (normalizedStatus === "ready") {
+            if (customerEmail) {
+              emailTasks.push(
+                sendOrderReadyEmail({
+                  order: orderWithRelations as any,
+                  customerName,
+                  customerEmail,
+                  vendorName,
+                })
+              );
+            }
+          }
 
           if (normalizedStatus === "delivering") {
             if (customerEmail) {

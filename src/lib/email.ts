@@ -121,11 +121,14 @@ function renderShell(opts: {
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>${opts.title}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap" rel="stylesheet">
         <style>
           body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: #35301D;
-            color: #E2E8F0;
+            font-family: 'Lilita One', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #FFF8E7;
+            color: #3D2A1A;
             margin: 0;
             padding: 0;
             -webkit-font-smoothing: antialiased;
@@ -133,62 +136,67 @@ function renderShell(opts: {
           .container {
             max-width: 600px;
             margin: 40px auto;
-            background-color: #3D2A1A;
+            background-color: #FFFFFF;
             border-radius: 24px;
             overflow: hidden;
-            border: 1px solid rgba(255, 140, 0, 0.15);
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(61, 42, 26, 0.1);
+            box-shadow: 0 20px 40px rgba(61, 42, 26, 0.08);
           }
           .header {
-            background-color: rgba(255, 140, 0, 0.08);
+            background-color: #3D2A1A;
             padding: 40px 30px;
             text-align: center;
-            border-bottom: 1px solid rgba(255, 140, 0, 0.12);
+            border-bottom: none;
           }
           .logo {
+            font-family: 'Lilita One', sans-serif;
             font-size: 28px;
-            font-weight: 800;
+            font-weight: 400;
             letter-spacing: -0.5px;
-            color: #FF8C00;
+            color: #FFF8E7;
             text-decoration: none;
           }
           .content {
             padding: 40px 30px;
           }
           h1 {
+            font-family: 'Lilita One', sans-serif;
             font-size: 24px;
-            font-weight: 700;
-            color: #FFFFFF;
+            font-weight: 400;
+            color: #3D2A1A;
             margin-top: 0;
             margin-bottom: 16px;
             text-align: center;
           }
           p {
+            font-family: 'Lilita One', sans-serif;
             font-size: 15px;
             line-height: 1.6;
-            color: #C4B89A;
+            color: #5C4033;
             margin-top: 0;
             margin-bottom: 24px;
           }
           .highlight-box {
-            background-color: rgba(255, 255, 255, 0.04);
-            border-left: 3px solid #FF8C00;
+            background-color: #FFF8E7;
+            border-left: 3px solid #3D2A1A;
             padding: 20px;
             border-radius: 0 12px 12px 0;
             margin-bottom: 30px;
           }
           .highlight-label {
+            font-family: 'Lilita One', sans-serif;
             font-size: 11px;
-            font-weight: 800;
-            color: #FF8C00;
+            font-weight: 400;
+            color: #3D2A1A;
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-bottom: 4px;
           }
           .highlight-value {
+            font-family: 'Lilita One', sans-serif;
             font-size: 16px;
-            font-weight: 700;
-            color: #FFFFFF;
+            font-weight: 400;
+            color: #3D2A1A;
           }
           .btn-container {
             text-align: center;
@@ -196,53 +204,75 @@ function renderShell(opts: {
           }
           .btn {
             display: inline-block;
-            background-color: #FF8C00;
-            color: #35301D;
-            font-weight: 700;
+            background-color: #3D2A1A;
+            color: #FFF8E7;
+            font-family: 'Lilita One', sans-serif;
+            font-weight: 400;
             font-size: 15px;
             text-decoration: none;
             padding: 16px 40px;
             border-radius: 12px;
-            box-shadow: 0 8px 20px rgba(255, 140, 0, 0.25);
+            box-shadow: 0 8px 20px rgba(61, 42, 26, 0.15);
             transition: all 0.2s ease;
           }
           .footer {
-            background-color: #2A1F14;
+            background-color: #3D2A1A;
             padding: 30px;
             text-align: center;
-            border-top: 1px solid rgba(255, 140, 0, 0.08);
+            border-top: none;
           }
           .footer p {
+            font-family: 'Lilita One', sans-serif;
             font-size: 12px;
-            color: #8A7B66;
+            color: #C4B89A;
             margin: 0;
           }
           .warning-text {
+            font-family: 'Lilita One', sans-serif;
             font-size: 12px;
-            color: #9A8B76;
+            color: #8A7B66;
             text-align: center;
             margin-top: 20px;
           }
           .quote-box {
-            background-color: rgba(255, 140, 0, 0.06);
-            border-left: 3px solid #FF8C00;
+            background-color: #FFF8E7;
+            border-left: 3px solid #3D2A1A;
             padding: 16px 20px;
             border-radius: 0 12px 12px 0;
             margin-bottom: 28px;
           }
           .quote-label {
+            font-family: 'Lilita One', sans-serif;
             font-size: 11px;
-            font-weight: 800;
-            color: #FF8C00;
+            font-weight: 400;
+            color: #3D2A1A;
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-bottom: 6px;
           }
           .quote-text {
+            font-family: 'Lilita One', sans-serif;
             font-size: 15px;
-            color: #C4B89A;
+            color: #5C4033;
             font-style: italic;
             line-height: 1.5;
+          }
+          .order-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          .order-table td {
+            font-family: 'Lilita One', sans-serif;
+            font-size: 14px;
+            color: #3D2A1A;
+          }
+          .section {
+            font-family: 'Lilita One', sans-serif;
+            font-size: 14px;
+            color: #3D2A1A;
+            line-height: 1.8;
+            margin-bottom: 16px;
           }
         </style>
       </head>
@@ -416,6 +446,56 @@ export async function sendNewOrderVendorEmail({
   });
 
   return dispatchEmail({ to: vendorEmail, subject: `New order received — ${order.id}`, html, context: "vendor-new-order" });
+}
+
+export async function sendOrderPreparingEmail({
+  order,
+  customerName,
+  customerEmail,
+  vendorName,
+}: {
+  order: OrderDetails;
+  customerName: string;
+  customerEmail: string;
+  vendorName: string;
+}) {
+  const html = renderShell({
+    title: "Your Order is Being Prepared",
+    heading: "Your Order is Being Prepared",
+    intro: `Hi ${customerName},`,
+    bodyParagraphs: [
+      `Great news! ${vendorName} has started preparing your order. Sit tight — your food is on its way.`,
+      buildOrderSummarySection(order),
+    ],
+    footerNote: "Track your order in-app for live updates.",
+  });
+
+  return dispatchEmail({ to: customerEmail, subject: `Order is being prepared — ${order.id}`, html, context: "order-preparing" });
+}
+
+export async function sendOrderReadyEmail({
+  order,
+  customerName,
+  customerEmail,
+  vendorName,
+}: {
+  order: OrderDetails;
+  customerName: string;
+  customerEmail: string;
+  vendorName: string;
+}) {
+  const html = renderShell({
+    title: "Your Order is Ready",
+    heading: "Your Order is Ready for Pickup",
+    intro: `Hi ${customerName},`,
+    bodyParagraphs: [
+      `Great news! ${vendorName} has finished preparing your order. A rider will pick it up shortly.`,
+      buildOrderSummarySection(order),
+    ],
+    footerNote: "Track your delivery in-app.",
+  });
+
+  return dispatchEmail({ to: customerEmail, subject: `Order ready for pickup — ${order.id}`, html, context: "order-ready" });
 }
 
 export async function sendOrderDeliveringEmail({
