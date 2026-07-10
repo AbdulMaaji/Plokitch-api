@@ -264,7 +264,7 @@ function renderShell(opts: {
             </p>
           </div>
           <div class="footer">
-            <p>&copy; ${new Date().getFullYear()} Plokitch Marketplace. All operational rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} Plokitch. All rights reserved.</p>
           </div>
         </div>
       </body>
