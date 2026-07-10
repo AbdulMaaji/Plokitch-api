@@ -272,6 +272,263 @@ function renderShell(opts: {
   `;
 }
 
+// ──────────────────────────────────────────────────────────────
+// Types + small order helpers used by transactional notifications
+// ──────────────────────────────────────────────────────────────
+type OrderItem = {
+  menuItemId: string;
+  name: string;
+  price: number;
+  quantity: number;
+};
+
+type DeliveryAddress = {
+  street: string;
+  city: string;
+  state: string;
+  instructions?: string;
+  lat?: number;
+  lng?: number;
+};
+
+type OrderDetails = {
+  id: string;
+  totalAmount: string;
+  deliveryFee?: string | null;
+  status: string;
+  items: OrderItem[];
+  deliveryAddress?: DeliveryAddress | null;
+  notes?: string | null;
+  isPriority?: boolean | null;
+  estimatedDelivery?: Date | null;
+};
+
+function formatCurrency(value: number | string) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+    typeof value === "string" ? Number(value) : value
+  );
+}
+
+function formatDeliveryAddress(address?: DeliveryAddress | null) {
+  if (!address) return "No delivery address provided.";
+  return `${address.street}, ${address.city}, ${address.state}${address.instructions ? ` — ${address.instructions}` : ""}`;
+}
+
+function buildOrderItemsHtml(items: OrderItem[]) {
+  return items
+    .map(
+      (item) => `
+          <tr>
+            <td style="padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08);">${item.name}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08); text-align:right;">${item.quantity}×</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08); text-align:right;">${formatCurrency(item.price)}</td>
+          </tr>`
+    )
+    .join("");
+}
+
+function buildOrderSummarySection(order: OrderDetails) {
+  return `
+    <div class="section">
+      <strong>Order ID:</strong> ${order.id}<br />
+      <strong>Status:</strong> ${order.status}<br />
+      <strong>Total:</strong> ${formatCurrency(order.totalAmount)}<br />
+      ${order.deliveryFee ? `<strong>Delivery fee:</strong> ${formatCurrency(order.deliveryFee)}<br />` : ""}
+      <strong>Delivery address:</strong> ${formatDeliveryAddress(order.deliveryAddress)}<br />
+      ${order.notes ? `<strong>Notes:</strong> ${order.notes}<br />` : ""}
+    </div>
+    <table class="order-table">
+      ${buildOrderItemsHtml(order.items)}
+    </table>
+  `;
+}
+
+// ──────────────────────────────────────────────────────────────
+// Transactional convenience emails required by the app
+// ──────────────────────────────────────────────────────────────
+export async function sendWelcomeEmail({
+  email,
+  name,
+}: {
+  email: string;
+  name?: string;
+}) {
+  const html = renderShell({
+    title: "Welcome to Plokitch",
+    heading: "Welcome to Plokitch",
+    intro: `Hello ${name ?? "there"},`,
+    bodyParagraphs: [
+      "Welcome to Plokitch! Your account is now active and ready to help you discover delicious meals from local vendors and track every order from kitchen to doorstep.",
+    ],
+    footerNote: "If you didn’t create an account, please contact support.",
+  });
+
+  return dispatchEmail({ to: email, subject: "Welcome to Plokitch!", html, context: "welcome-email" });
+}
+
+export async function sendOrderReceiptEmail({
+  order,
+  customerName,
+  customerEmail,
+  vendorName,
+}: {
+  order: OrderDetails;
+  customerName: string;
+  customerEmail: string;
+  vendorName: string;
+}) {
+  const html = renderShell({
+    title: "Order Receipt",
+    heading: "Order Received",
+    intro: `Hi ${customerName},`,
+    bodyParagraphs: [
+      `Thanks for your order! We have received your request and ${vendorName} is preparing it now.`,
+      buildOrderSummarySection(order),
+      "We’ll let you know when your order is on the way.",
+    ],
+    footerNote: "This is an automated receipt from Plokitch.",
+  });
+
+  return dispatchEmail({ to: customerEmail, subject: `Order received — ${order.id}`, html, context: "order-receipt" });
+}
+
+export async function sendNewOrderVendorEmail({
+  order,
+  vendorEmail,
+  vendorName,
+  customerName,
+}: {
+  order: OrderDetails;
+  vendorEmail: string;
+  vendorName: string;
+  customerName: string;
+}) {
+  const html = renderShell({
+    title: "New Order Received",
+    heading: "New Order Received",
+    intro: `Hi ${vendorName},`,
+    bodyParagraphs: [
+      `You’ve received a new order from ${customerName}. Please begin preparing the items and update the order status when it’s ready.`,
+      buildOrderSummarySection(order),
+    ],
+    footerNote: "This is an automated notification for your vendor account.",
+  });
+
+  return dispatchEmail({ to: vendorEmail, subject: `New order received — ${order.id}`, html, context: "vendor-new-order" });
+}
+
+export async function sendOrderDeliveringEmail({
+  order,
+  customerName,
+  customerEmail,
+}: {
+  order: OrderDetails;
+  customerName: string;
+  customerEmail: string;
+}) {
+  const html = renderShell({
+    title: "Your Order is On the Way",
+    heading: "Your Order is On the Way",
+    intro: `Hi ${customerName},`,
+    bodyParagraphs: [
+      "Good news — your order is out for delivery! Your rider is bringing it straight to the address below:",
+      buildOrderSummarySection(order),
+      "Expect it shortly.",
+    ],
+    footerNote: "Track your delivery in-app.",
+  });
+
+  return dispatchEmail({ to: customerEmail, subject: `Your order is on the way — ${order.id}`, html, context: "order-delivering" });
+}
+
+export async function sendOrderCompletedEmail({
+  order,
+  customerName,
+  customerEmail,
+  vendorName,
+  vendorEmail,
+  riderName,
+  riderEmail,
+}: {
+  order: OrderDetails;
+  customerName: string;
+  customerEmail: string;
+  vendorName: string;
+  vendorEmail: string;
+  riderName?: string;
+  riderEmail?: string;
+}) {
+  const customerHtml = renderShell({
+    title: "Order Completed",
+    heading: "Order Completed",
+    intro: `Hi ${customerName},`,
+    bodyParagraphs: [buildOrderSummarySection(order)],
+    footerNote: "Thank you for ordering with Plokitch.",
+  });
+
+  const vendorHtml = renderShell({
+    title: "Order Completed",
+    heading: "Order Completed",
+    intro: `Hi ${vendorName},`,
+    bodyParagraphs: ["This order has been marked as completed. Thank you for preparing and fulfilling the order.", buildOrderSummarySection(order)],
+    footerNote: "Order completed notification.",
+  });
+
+  const tasks: Promise<any>[] = [dispatchEmail({ to: customerEmail, subject: `Order completed — ${order.id}`, html: customerHtml, context: "order-completed-customer" }), dispatchEmail({ to: vendorEmail, subject: `Order completed — ${order.id}`, html: vendorHtml, context: "order-completed-vendor" })];
+
+  if (riderEmail) {
+    const riderHtml = renderShell({
+      title: "Delivery Completed",
+      heading: "Delivery Completed",
+      intro: `Hi ${riderName ?? "Rider"},`,
+      bodyParagraphs: ["Your delivery has been completed successfully. Thanks for making it there on time.", buildOrderSummarySection(order)],
+      footerNote: "Delivery completed notification.",
+    });
+
+    tasks.push(dispatchEmail({ to: riderEmail, subject: `Delivery completed — ${order.id}`, html: riderHtml, context: "delivery-completed-rider" }));
+  }
+
+  return Promise.all(tasks);
+}
+
+export async function sendOrderCancelledEmail({
+  order,
+  vendorName,
+  vendorEmail,
+  riderName,
+  riderEmail,
+}: {
+  order: OrderDetails;
+  vendorName: string;
+  vendorEmail: string;
+  riderName?: string;
+  riderEmail?: string;
+}) {
+  const vendorHtml = renderShell({
+    title: "Order Cancelled",
+    heading: "Order Cancelled",
+    intro: `Hi ${vendorName},`,
+    bodyParagraphs: ["This order has been cancelled. Please do not prepare any further items.", buildOrderSummarySection(order)],
+    footerNote: "Order cancellation notification.",
+  });
+
+  const tasks: Promise<any>[] = [dispatchEmail({ to: vendorEmail, subject: `Order cancelled — ${order.id}`, html: vendorHtml, context: "order-cancelled-vendor" })];
+
+  if (riderEmail) {
+    const riderHtml = renderShell({
+      title: "Delivery Cancelled",
+      heading: "Delivery Cancelled",
+      intro: `Hi ${riderName ?? "Rider"},`,
+      bodyParagraphs: ["This delivery has been cancelled. No further action is needed on your end.", buildOrderSummarySection(order)],
+      footerNote: "Delivery cancellation notification.",
+    });
+
+    tasks.push(dispatchEmail({ to: riderEmail, subject: `Delivery cancelled — ${order.id}`, html: riderHtml, context: "delivery-cancelled-rider" }));
+  }
+
+  return Promise.all(tasks);
+}
+
 function formatExpiry(expiresAt: Date) {
   return expiresAt.toLocaleDateString(undefined, {
     weekday: "long",

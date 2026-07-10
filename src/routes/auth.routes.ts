@@ -13,6 +13,7 @@ import {
   session as sessionSchema,
 } from "../db/schema.js";
 import { randomUUID } from "crypto";
+import { sendWelcomeEmail } from "../lib/email.js";
 
 const COOKIE_DOMAIN =
   process.env.NODE_ENV === "production" ? ".plokitch.app" : undefined;
@@ -290,6 +291,25 @@ export async function authRoutes(fastify: FastifyInstance) {
         });
 
         const body = await response.text();
+
+        // If this was a successful sign-up via the email sign-up endpoint,
+        // send a welcome email to new customers.
+        try {
+          const requestPath = request.url || "";
+          // Only send for the explicit sign-up/email route and when the proxied
+          // handler returned a successful response.
+          if (response.ok && requestPath.endsWith("/api/auth/sign-up/email")) {
+            const reqBody = (request.body || {}) as { email?: string; name?: string; role?: string };
+            const role = (reqBody.role ?? "customer") as string;
+            if (role === "customer" && reqBody.email) {
+              void sendWelcomeEmail({ email: reqBody.email, name: reqBody.name }).catch((err) => {
+                fastify.log.error(err, "Failed to send welcome email");
+              });
+            }
+          }
+        } catch (err) {
+          fastify.log.error(err, "Failed welcome-email post-processing");
+        }
 
         if (response.status >= 400) {
           fastify.log.warn({ status: response.status, body }, "Auth handler error response");

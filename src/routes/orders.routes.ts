@@ -8,6 +8,13 @@ import { notifyUser } from "../lib/notifications.js";
 import { broadcastOrderToOnlineRiders } from "../lib/dispatch.js";
 import { isGlobalAutoDispatchEnabled } from "../lib/settings.js";
 import { creditWallet } from "../lib/wallet.js";
+import {
+  sendNewOrderVendorEmail,
+  sendOrderCompletedEmail,
+  sendOrderDeliveringEmail,
+  sendOrderReceiptEmail,
+  sendOrderCancelledEmail,
+} from "../lib/email.js";
 
 /**
  * Order routes — /api/orders
@@ -63,9 +70,11 @@ export async function orderRoutes(fastify: FastifyInstance) {
         })
         .returning();
 
-      // Notify the vendor owner that a new order has arrived.
+      // Notify the vendor owner that a new order has arrived (in-app) and
+      // also send transactional emails to customer and vendor.
       const orderVendor = await db.query.vendor.findFirst({
         where: eq(vendor.id, body.vendorId),
+        with: { user: true },
       });
       if (orderVendor?.userId) {
         const itemCount = body.items.reduce((n, i) => n + i.quantity, 0);
@@ -77,6 +86,23 @@ export async function orderRoutes(fastify: FastifyInstance) {
           orderId: newOrder.id,
           data: { status: "pending" },
         });
+      }
+
+      // Fire emails (best-effort non-blocking)
+      try {
+        const vendorInfo = await db.query.vendor.findFirst({ where: eq(vendor.id, newOrder.vendorId), with: { user: true } });
+        void Promise.allSettled([
+          sendOrderReceiptEmail({ order: newOrder as any, customerName: session.user.name, customerEmail: session.user.email, vendorName: vendorInfo?.businessName ?? "your vendor" }),
+          vendorInfo?.user?.email
+            ? sendNewOrderVendorEmail({ order: newOrder as any, vendorEmail: vendorInfo.user.email, vendorName: vendorInfo.businessName, customerName: session.user.name })
+            : Promise.resolve(),
+        ]).then((results) => {
+          results.forEach((r) => {
+            if (r.status === "rejected") fastify.log.error(r.reason, "Order notification email failed");
+          });
+        });
+      } catch (err) {
+        fastify.log.error(err, "Failed to kick off order emails");
       }
 
       return reply.status(201).send({ success: true, data: newOrder });
@@ -364,6 +390,34 @@ export async function orderRoutes(fastify: FastifyInstance) {
           orderId: updated.id,
           data: { status: body.status },
         });
+      }
+
+      // Send status-change emails for certain transitions
+      try {
+        const orderWithRelations = await db.query.order.findFirst({
+          where: eq(order.id, updated.id),
+          with: { customer: true, vendor: { with: { user: true } }, rider: true },
+        });
+
+        if (orderWithRelations) {
+          void Promise.allSettled([
+            body.status === "delivering"
+              ? sendOrderDeliveringEmail({ order: orderWithRelations as any, customerName: orderWithRelations.customer.name, customerEmail: orderWithRelations.customer.email })
+              : Promise.resolve(),
+            body.status === "completed"
+              ? sendOrderCompletedEmail({ order: orderWithRelations as any, customerName: orderWithRelations.customer.name, customerEmail: orderWithRelations.customer.email, vendorName: orderWithRelations.vendor.businessName, vendorEmail: orderWithRelations.vendor.user.email, riderName: orderWithRelations.rider?.name, riderEmail: orderWithRelations.rider?.email })
+              : Promise.resolve(),
+            body.status === "cancelled"
+              ? sendOrderCancelledEmail({ order: orderWithRelations as any, vendorName: orderWithRelations.vendor.businessName, vendorEmail: orderWithRelations.vendor.user.email, riderName: orderWithRelations.rider?.name, riderEmail: orderWithRelations.rider?.email })
+              : Promise.resolve(),
+          ]).then((results) => {
+            results.forEach((r) => {
+              if (r.status === "rejected") fastify.log.error(r.reason, "Order status notification email failed");
+            });
+          });
+        }
+      } catch (err) {
+        fastify.log.error(err, "Failed to send order status emails");
       }
 
       return reply.send({ success: true, data: updated });
