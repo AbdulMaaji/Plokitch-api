@@ -124,7 +124,7 @@ function renderShell(opts: {
         <style>
           body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: #0A0D14;
+            background-color: #35301D;
             color: #E2E8F0;
             margin: 0;
             padding: 0;
@@ -133,23 +133,23 @@ function renderShell(opts: {
           .container {
             max-width: 600px;
             margin: 40px auto;
-            background-color: #121620;
+            background-color: #3D2A1A;
             border-radius: 24px;
             overflow: hidden;
-            border: 1px solid rgba(212, 175, 55, 0.15);
+            border: 1px solid rgba(255, 140, 0, 0.15);
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
           }
           .header {
-            background-color: rgba(212, 175, 55, 0.05);
+            background-color: rgba(255, 140, 0, 0.08);
             padding: 40px 30px;
             text-align: center;
-            border-bottom: 1px solid rgba(212, 175, 55, 0.1);
+            border-bottom: 1px solid rgba(255, 140, 0, 0.12);
           }
           .logo {
             font-size: 28px;
             font-weight: 800;
             letter-spacing: -0.5px;
-            color: #D4AF37;
+            color: #FF8C00;
             text-decoration: none;
           }
           .content {
@@ -166,13 +166,13 @@ function renderShell(opts: {
           p {
             font-size: 15px;
             line-height: 1.6;
-            color: #94A3B8;
+            color: #C4B89A;
             margin-top: 0;
             margin-bottom: 24px;
           }
           .highlight-box {
-            background-color: rgba(255, 255, 255, 0.03);
-            border-left: 3px solid #D4AF37;
+            background-color: rgba(255, 255, 255, 0.04);
+            border-left: 3px solid #FF8C00;
             padding: 20px;
             border-radius: 0 12px 12px 0;
             margin-bottom: 30px;
@@ -180,7 +180,7 @@ function renderShell(opts: {
           .highlight-label {
             font-size: 11px;
             font-weight: 800;
-            color: #D4AF37;
+            color: #FF8C00;
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-bottom: 4px;
@@ -196,36 +196,36 @@ function renderShell(opts: {
           }
           .btn {
             display: inline-block;
-            background-color: #D4AF37;
-            color: #0A0D14;
+            background-color: #FF8C00;
+            color: #35301D;
             font-weight: 700;
             font-size: 15px;
             text-decoration: none;
             padding: 16px 40px;
             border-radius: 12px;
-            box-shadow: 0 8px 20px rgba(212, 175, 55, 0.25);
+            box-shadow: 0 8px 20px rgba(255, 140, 0, 0.25);
             transition: all 0.2s ease;
           }
           .footer {
-            background-color: #080B10;
+            background-color: #2A1F14;
             padding: 30px;
             text-align: center;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            border-top: 1px solid rgba(255, 140, 0, 0.08);
           }
           .footer p {
             font-size: 12px;
-            color: #475569;
+            color: #8A7B66;
             margin: 0;
           }
           .warning-text {
             font-size: 12px;
-            color: #64748B;
+            color: #9A8B76;
             text-align: center;
             margin-top: 20px;
           }
           .quote-box {
-            background-color: rgba(45, 212, 191, 0.06);
-            border-left: 3px solid #2DD4BF;
+            background-color: rgba(255, 140, 0, 0.06);
+            border-left: 3px solid #FF8C00;
             padding: 16px 20px;
             border-radius: 0 12px 12px 0;
             margin-bottom: 28px;
@@ -233,14 +233,14 @@ function renderShell(opts: {
           .quote-label {
             font-size: 11px;
             font-weight: 800;
-            color: #2DD4BF;
+            color: #FF8C00;
             text-transform: uppercase;
             letter-spacing: 1px;
             margin-bottom: 6px;
           }
           .quote-text {
             font-size: 15px;
-            color: #CBD5E1;
+            color: #C4B89A;
             font-style: italic;
             line-height: 1.5;
           }
@@ -320,9 +320,9 @@ function buildOrderItemsHtml(items: OrderItem[]) {
     .map(
       (item) => `
           <tr>
-            <td style="padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08);">${item.name}</td>
-            <td style="padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08); text-align:right;">${item.quantity}×</td>
-            <td style="padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08); text-align:right;">${formatCurrency(item.price)}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid rgba(255,140,0,0.1);">${item.name}</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid rgba(255,140,0,0.1); text-align:right;">${item.quantity}×</td>
+            <td style="padding: 10px 0; border-bottom: 1px solid rgba(255,140,0,0.1); text-align:right;">${formatCurrency(item.price)}</td>
           </tr>`
     )
     .join("");
@@ -780,7 +780,7 @@ export async function sendRejectionEmail({
     quote: reason ? { label: "Reviewer note", text: reason } : undefined,
     bodyParagraphs: [
       "You're welcome to reapply after 30 days.",
-      `If you have questions, reach us at <a href="mailto:${supportEmail}" style="color: #D4AF37; text-decoration: none;">${supportEmail}</a>.`,
+      `If you have questions, reach us at <a href="mailto:${supportEmail}" style="color: #FF8C00; text-decoration: none;">${supportEmail}</a>.`,
     ],
     footerNote: "This is an automated message regarding your Plokitch application.",
   });
@@ -831,7 +831,7 @@ export async function sendContactMessage({
     ],
     quote: { label: "Message", text: safeMessage },
     bodyParagraphs: [
-      `Reply directly to <a href="mailto:${email}" style="color: #D4AF37; text-decoration: none;">${email}</a> to respond.`,
+      `Reply directly to <a href="mailto:${email}" style="color: #FF8C00; text-decoration: none;">${email}</a> to respond.`,
     ],
     footerNote: "This is an automated internal notification from the Plokitch Contact page.",
   });
