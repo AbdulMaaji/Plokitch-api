@@ -304,7 +304,8 @@ type OrderDetails = {
 };
 
 function formatCurrency(value: number | string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
+  // Format as Nigerian Naira
+  return new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN" }).format(
     typeof value === "string" ? Number(value) : value
   );
 }
