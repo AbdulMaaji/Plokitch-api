@@ -51,7 +51,8 @@ const fastify = Fastify({
 // ──────────────────────────────────────────────────────────────
 await fastify.register(fastifySensible);
 // Multipart support for image uploads
-await fastify.register(await import('@fastify/multipart'));
+const fastifyMultipart = (await import('@fastify/multipart')).default;
+await fastify.register(fastifyMultipart);
 await fastify.register(fastifyHelmet, {
   contentSecurityPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" },
