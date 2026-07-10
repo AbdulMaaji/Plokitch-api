@@ -267,6 +267,67 @@ export async function vendorRoutes(fastify: FastifyInstance) {
     }
   );
 
+  // POST /api/vendors/:id/image — upload a single kitchen image
+  fastify.post(
+    "/api/vendors/:id/image",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const session = (request as any).session;
+      const { id } = request.params as { id: string };
+
+      const vendorData = await db.query.vendor.findFirst({ where: eq(vendor.id, id) });
+      if (!vendorData || vendorData.userId !== session.user.id) {
+        return reply.status(403).send({ success: false, error: "Forbidden" });
+      }
+
+      try {
+        const filesIter = (request as any).files ? (request as any).files() : null;
+        if (!filesIter) {
+          return reply.status(400).send({ success: false, error: "No file provided" });
+        }
+
+        let publicUrl = "";
+        async function streamToBuffer(stream: any) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          return Buffer.concat(chunks);
+        }
+
+        for await (const part of filesIter) {
+          if (!part || !part.filename) continue;
+          const buffer = part.toBuffer ? await part.toBuffer() : await streamToBuffer(part.file);
+          const path = `kitchens/${id}/${Date.now()}_${part.filename}`;
+          const { supabase } = await import("../lib/supabase.js");
+          const { error: uploadErr } = await supabase.storage.from("kitchens").upload(path, buffer, {
+            contentType: part.mimetype || "application/octet-stream",
+            upsert: false,
+          });
+          if (uploadErr) {
+            request.log.error({ err: uploadErr }, "Supabase upload failed");
+            return reply.status(500).send({ success: false, error: "Could not upload image." });
+          }
+          publicUrl = supabase.storage.from("kitchens").getPublicUrl(path).data.publicUrl;
+          break;
+        }
+
+        if (!publicUrl) {
+          return reply.status(400).send({ success: false, error: "No image uploaded" });
+        }
+
+        const [updated] = await db
+          .update(vendor)
+          .set({ imageUrl: publicUrl, updatedAt: new Date() })
+          .where(eq(vendor.id, id))
+          .returning();
+
+        return reply.send({ success: true, data: updated });
+      } catch (err) {
+        request.log.error(err, "Vendor image upload error");
+        return reply.status(500).send({ success: false, error: "Could not upload image." });
+      }
+    }
+  );
+
   // ── Menu Item sub-routes ────────────────────────────────
 
   // GET /api/vendors/:id/menu — get all menu items for a vendor
