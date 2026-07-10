@@ -16,6 +16,13 @@ export async function userRoutes(fastify: FastifyInstance) {
       const session = (request as any).session;
       const userData = await db.query.user.findFirst({
         where: eq(user.id, session.user.id),
+        with: {
+          vendor: {
+            columns: {
+              id: true,
+            },
+          },
+        },
         columns: {
           id: true,
           name: true,
@@ -36,7 +43,14 @@ export async function userRoutes(fastify: FastifyInstance) {
         return reply.status(404).send({ success: false, error: "User not found" });
       }
 
-      return reply.send({ success: true, data: userData });
+      return reply.send({
+        success: true,
+        data: {
+          ...userData,
+          vendorId: (userData as any).vendor?.id,
+          vendor_id: (userData as any).vendor?.id,
+        },
+      });
     }
   );
 
