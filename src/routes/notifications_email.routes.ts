@@ -84,6 +84,12 @@ export async function notificationEmailRoutes(fastify: FastifyInstance) {
           });
           break;
 
+        case "order_assigned":
+          // payload: { order, customerName, customerEmail, riderName }
+          // No dedicated email template yet — logged for future use.
+          fastify.log.info({ orderId: payload.order?.id, riderName: payload.riderName }, "order_assigned email action received (no template yet)");
+          break;
+
         default:
           return reply.status(400).send({ success: false, error: "Unknown action" });
       }
