@@ -47,12 +47,20 @@ export async function requireAuth(
     });
   }
   
-  // If the authenticated user is an admin, allow overriding the active role via header
+  // If the authenticated user is an admin, allow overriding the active role via header or cookie
   const user = session.user as any;
   if (user && user.role === "admin") {
-    const headerRole = request.headers["x-admin-active-role"] as string;
-    if (headerRole === "customer" || headerRole === "chef" || headerRole === "rider") {
-      const overriddenUser = { ...session.user, role: headerRole };
+    let activeRole = request.headers["x-admin-active-role"] as string | undefined;
+
+    if (!activeRole && request.headers.cookie) {
+      const match = request.headers.cookie.match(/admin_active_role=([^;\s]+)/);
+      if (match) {
+        activeRole = match[1];
+      }
+    }
+
+    if (activeRole === "customer" || activeRole === "chef" || activeRole === "rider") {
+      const overriddenUser = { ...session.user, role: activeRole };
       (request as any).session = {
         ...session,
         user: overriddenUser,

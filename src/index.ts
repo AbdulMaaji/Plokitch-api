@@ -115,6 +115,7 @@ await fastify.register(fastifyCors, {
     "X-Requested-With",
     "Cookie",
     "x-better-auth-session",
+    "x-admin-active-role",
   ],
   exposedHeaders: ["set-cookie"],
   credentials: true,
