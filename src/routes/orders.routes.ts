@@ -112,14 +112,16 @@ export async function orderRoutes(fastify: FastifyInstance) {
     async (request, reply) => {
       const session = (request as any).session;
       const role = (session.user as any).role ?? "customer";
-      const query = request.query as { status?: string; limit?: string; offset?: string };
+      const query = request.query as { status?: string; limit?: string; offset?: string; vendorId?: string };
       const limit = parseInt(query.limit ?? "20");
       const offset = parseInt(query.offset ?? "0");
 
       let orders;
 
       if (role === "admin") {
+        const where = query.vendorId ? eq(order.vendorId, query.vendorId) : undefined;
         orders = await db.query.order.findMany({
+          where,
           with: { customer: true, vendor: true, rider: true },
           limit,
           offset,
