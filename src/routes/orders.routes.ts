@@ -396,25 +396,82 @@ export async function orderRoutes(fastify: FastifyInstance) {
       try {
         const orderWithRelations = await db.query.order.findFirst({
           where: eq(order.id, updated.id),
-          with: { customer: true, vendor: { with: { user: true } }, rider: true },
+          with: { customer: true, vendor: true, rider: true },
         });
 
         if (orderWithRelations) {
-          void Promise.allSettled([
-            body.status === "delivering"
-              ? sendOrderDeliveringEmail({ order: orderWithRelations as any, customerName: orderWithRelations.customer.name, customerEmail: orderWithRelations.customer.email })
-              : Promise.resolve(),
-            body.status === "completed"
-              ? sendOrderCompletedEmail({ order: orderWithRelations as any, customerName: orderWithRelations.customer.name, customerEmail: orderWithRelations.customer.email, vendorName: orderWithRelations.vendor.businessName, vendorEmail: orderWithRelations.vendor.user.email, riderName: orderWithRelations.rider?.name, riderEmail: orderWithRelations.rider?.email })
-              : Promise.resolve(),
-            body.status === "cancelled"
-              ? sendOrderCancelledEmail({ order: orderWithRelations as any, vendorName: orderWithRelations.vendor.businessName, vendorEmail: orderWithRelations.vendor.user.email, riderName: orderWithRelations.rider?.name, riderEmail: orderWithRelations.rider?.email })
-              : Promise.resolve(),
-          ]).then((results) => {
-            results.forEach((r) => {
-              if (r.status === "rejected") fastify.log.error(r.reason, "Order status notification email failed");
-            });
+          const vendorWithUser = await db.query.vendor.findFirst({
+            where: eq(vendor.id, orderWithRelations.vendorId),
+            with: { user: true },
           });
+
+          const customerEmail = orderWithRelations.customer?.email;
+          const customerName = orderWithRelations.customer?.name ?? "Customer";
+          const riderName = orderWithRelations.rider?.name;
+          const riderEmail = orderWithRelations.rider?.email;
+          const vendorEmail = vendorWithUser?.user?.email;
+          const vendorName = vendorWithUser?.businessName ?? orderWithRelations.vendor.businessName;
+
+          const emailTasks: Promise<any>[] = [];
+
+          if (body.status === "delivering") {
+            if (customerEmail) {
+              emailTasks.push(
+                sendOrderDeliveringEmail({
+                  order: orderWithRelations as any,
+                  customerName,
+                  customerEmail,
+                })
+              );
+            } else {
+              fastify.log.error({ orderId: orderWithRelations.id }, "Customer email missing for delivering notification");
+            }
+          }
+
+          if (body.status === "completed") {
+            if (customerEmail && vendorEmail) {
+              emailTasks.push(
+                sendOrderCompletedEmail({
+                  order: orderWithRelations as any,
+                  customerName,
+                  customerEmail,
+                  vendorName,
+                  vendorEmail,
+                  riderName,
+                  riderEmail,
+                })
+              );
+            } else {
+              fastify.log.error(
+                { orderId: orderWithRelations.id, customerEmail, vendorEmail },
+                "Missing recipient email(s) for completed order notification"
+              );
+            }
+          }
+
+          if (body.status === "cancelled") {
+            if (vendorEmail) {
+              emailTasks.push(
+                sendOrderCancelledEmail({
+                  order: orderWithRelations as any,
+                  vendorName,
+                  vendorEmail,
+                  riderName,
+                  riderEmail,
+                })
+              );
+            } else {
+              fastify.log.error({ orderId: orderWithRelations.id, vendorEmail }, "Vendor email missing for cancelled order notification");
+            }
+          }
+
+          if (emailTasks.length > 0) {
+            void Promise.allSettled(emailTasks).then((results) => {
+              results.forEach((r) => {
+                if (r.status === "rejected") fastify.log.error(r.reason, "Order status notification email failed");
+              });
+            });
+          }
         }
       } catch (err) {
         fastify.log.error(err, "Failed to send order status emails");
