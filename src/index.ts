@@ -18,6 +18,7 @@ import { fleetRoutes } from "./routes/fleet.routes.js";
 import { locationRoutes } from "./routes/location.routes.js";
 import { favoriteRoutes } from "./routes/favorites.routes.js";
 import { notificationRoutes } from "./routes/notifications.routes.js";
+import { notificationEmailRoutes } from "./routes/notifications_email.routes.js";
 import { dispatchRoutes } from "./routes/dispatch.routes.js";
 import { walletRoutes } from "./routes/wallet.routes.js";
 import { expireStaleOffers } from "./lib/dispatch.js";
@@ -157,6 +158,7 @@ await fastify.register(fleetRoutes, { prefix: "/api/fleet" });
 await fastify.register(locationRoutes);
 await fastify.register(favoriteRoutes);
 await fastify.register(notificationRoutes);
+await fastify.register(notificationEmailRoutes);
 await fastify.register(dispatchRoutes);
 await fastify.register(walletRoutes);
 
