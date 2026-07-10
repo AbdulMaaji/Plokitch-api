@@ -21,6 +21,7 @@ import { notificationRoutes } from "./routes/notifications.routes.js";
 import { notificationEmailRoutes } from "./routes/notifications_email.routes.js";
 import { dispatchRoutes } from "./routes/dispatch.routes.js";
 import { walletRoutes } from "./routes/wallet.routes.js";
+import { solvixWebhookRoutes } from "./routes/solvix.routes.js";
 import { expireStaleOffers } from "./lib/dispatch.js";
 import { errorHandler } from "./middleware/error.middleware.js";
 
@@ -163,6 +164,7 @@ await fastify.register(notificationRoutes);
 await fastify.register(notificationEmailRoutes);
 await fastify.register(dispatchRoutes);
 await fastify.register(walletRoutes);
+await fastify.register(solvixWebhookRoutes);
 
 // ──────────────────────────────────────────────────────────────
 // 404 handler

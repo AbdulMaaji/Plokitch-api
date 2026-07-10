@@ -78,6 +78,15 @@ export const payoutStatusEnum = pgEnum("payout_status", [
   "cancelled", // withdrawn by the requester before processing
 ]);
 
+export const solvixStatusEnum = pgEnum("solvix_status", [
+  "pending",
+  "assigned",
+  "picked_up",
+  "in_transit",
+  "delivered",
+  "cancelled",
+]);
+
 // ──────────────────────────────────────────────────────────────
 // Better Auth Core Tables
 // (better-auth will manage these via its CLI / adapter)
@@ -283,6 +292,10 @@ export const order = pgTable("order", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   isPriority: boolean("is_priority").default(false),
+  // Solvix Go delivery integration
+  solvixDeliveryId: text("solvix_delivery_id"),
+  solvixStatus: solvixStatusEnum("solvix_status"),
+  solvixRiderName: text("solvix_rider_name"),
 });
 
 // In-app notifications. Persisted for a feed + unread count; realtime delivery

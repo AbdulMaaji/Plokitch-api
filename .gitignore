@@ -84,3 +84,5 @@ public/
 # Drizzle generated files
 .drizzle/
 
+.env.example
+.env.example

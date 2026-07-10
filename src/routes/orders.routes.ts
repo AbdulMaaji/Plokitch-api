@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/index.js";
-import { order, vendor } from "../db/schema.js";
+import { order, vendor, user } from "../db/schema.js";
 import { eq, and, or, inArray, isNull, gt, lt } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
 import { resolveDeliveryFee } from "../lib/pricing.js";
@@ -15,6 +15,13 @@ import {
   sendOrderReceiptEmail,
   sendOrderCancelledEmail,
 } from "../lib/email.js";
+import {
+  createDelivery,
+  isSolvixConfigured,
+  SolvixNotConfiguredError,
+  SolvixApiError,
+  type SolvixCreateDeliveryPayload,
+} from "../lib/solvix.js";
 
 /**
  * Order routes — /api/orders
@@ -368,6 +375,102 @@ export async function orderRoutes(fastify: FastifyInstance) {
             .set({ dispatchedAt: new Date() })
             .where(eq(order.id, updated.id));
           await broadcastOrderToOnlineRiders(updated);
+        }
+
+        // Solvix third-party delivery handoff — create a delivery with Solvix
+        // Go when the order is ready and has no assigned Plokitch rider.
+        if (isSolvixConfigured()) {
+          try {
+            const orderVendorFull = await db.query.vendor.findFirst({
+              where: eq(vendor.id, updated.vendorId),
+              with: { user: true },
+            });
+            const customer = await db.query.user.findFirst({
+              where: eq(user.id, updated.customerId),
+            });
+
+            const itemDesc = (updated.items as any[])
+              ?.map((i: any) => `${i.quantity}x ${i.name}`)
+              .join(", ");
+
+            const pickupAddr = [
+              orderVendorFull?.location?.address,
+              orderVendorFull?.location?.city,
+              orderVendorFull?.location?.state,
+            ].filter(Boolean).join(", ");
+
+            const deliveryAddr = [
+              (updated.deliveryAddress as any)?.street,
+              (updated.deliveryAddress as any)?.city,
+              (updated.deliveryAddress as any)?.state,
+            ].filter(Boolean).join(", ");
+
+            const solvixPayload: SolvixCreateDeliveryPayload = {
+              pickupName: orderVendorFull?.businessName ?? orderVendorFull?.user?.name ?? "",
+              pickupAddress: pickupAddr,
+              receiverName: customer?.name ?? "",
+              receiverPhone: customer?.phone ?? "",
+              deliveryAddress: deliveryAddr,
+              packageDescription: itemDesc ?? "Food delivery",
+              paymentType: "Online",
+            };
+
+            const solvixResult = await createDelivery(solvixPayload);
+
+            // Solvix returns capitalized statuses — map to our lowercase enum
+            const statusMap: Record<string, string> = {
+              "Pending": "pending",
+              "Assigned": "assigned",
+              "Picked Up": "picked_up",
+              "In Transit": "in_transit",
+              "Delivered": "delivered",
+              "Cancelled": "cancelled",
+            };
+
+            await db
+              .update(order)
+              .set({
+                solvixDeliveryId: solvixResult.deliveryId,
+                solvixStatus: (statusMap[solvixResult.status] ?? "pending") as any,
+                dispatchedAt: updated.dispatchedAt ?? new Date(),
+                updatedAt: new Date(),
+              })
+              .where(eq(order.id, updated.id));
+
+            fastify.log.info(
+              { orderId: updated.id, solvixDeliveryId: solvixResult.deliveryId },
+              "Solvix delivery created"
+            );
+          } catch (err) {
+            // Solvix failure should not break the order flow — flag for manual dispatch
+            fastify.log.error(
+              { err, orderId: updated.id },
+              "Solvix createDelivery failed — order requires manual dispatch"
+            );
+
+            // Flag the order with a note so ops can see it needs attention
+            await db
+              .update(order)
+              .set({
+                solvixStatus: "pending" as any,
+                notes: `[SOLVIX_FAILED] ${updated.notes ?? ""}`.trim(),
+                updatedAt: new Date(),
+              })
+              .where(eq(order.id, updated.id));
+
+            // Alert admin if we have an alert channel configured
+            try {
+              const { sendNewApplicationAlert } = await import("../lib/email.js");
+              void sendNewApplicationAlert({
+                applicantType: "vendor",
+                contactName: "SOLVIX DISPATCH FAILURE",
+                contactEmail: process.env.ADMIN_ALERT_EMAIL || "ops@plokitch.app",
+                businessName: `Order ${updated.id.slice(0, 8)} needs manual dispatch — Solvix API error`,
+              });
+            } catch (_) {
+              // Best-effort alert — don't fail the handler
+            }
+          }
         }
       }
 
