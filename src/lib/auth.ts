@@ -4,7 +4,7 @@ import { bearer } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { db } from "../db/index.js";
 import * as schema from "../db/schema.js";
-import { sendLoginAlertEmail } from "./email.js";
+import { sendLoginAlertEmail, sendResetPasswordEmail } from "./email.js";
 import { notifyUser } from "./notifications.js";
 
 if (!process.env.BETTER_AUTH_SECRET) {
@@ -50,6 +50,17 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: false, // Set to true in production
     minPasswordLength: 8,
+    sendResetPassword: async ({ user, url }, request) => {
+      try {
+        await sendResetPasswordEmail({
+          email: user.email,
+          name: user.name,
+          url,
+        });
+      } catch (err) {
+        console.error("Failed to send reset password email:", err);
+      }
+    },
   },
 
   // ── User customization ────────────────────────────────────

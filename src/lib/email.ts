@@ -968,4 +968,32 @@ export async function sendLoginAlertEmail({
     context: "login-alert",
   });
 }
+export async function sendResetPasswordEmail({
+  email,
+  name,
+  url,
+}: {
+  email: string;
+  name: string;
+  url: string;
+}) {
+  const greeting = name ? `Hello ${name},` : "Hello,";
+  const html = renderShell({
+    title: "Reset Your Plokitch Password",
+    heading: "Reset Your Password",
+    intro: `${greeting} we received a request to reset your password for your Plokitch account.`,
+    bodyParagraphs: [
+      "To reset your password, please click the secure link below:",
+    ],
+    ctaLabel: "Reset Password",
+    ctaLink: url,
+    footerNote: "This link will expire in 1 hour. If you didn't request a password reset, you can safely ignore this email.",
+  });
 
+  return dispatchEmail({
+    to: email,
+    subject: "Reset your Plokitch Password",
+    html,
+    context: "password-reset",
+  });
+}
