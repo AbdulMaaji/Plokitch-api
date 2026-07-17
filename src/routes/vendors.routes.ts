@@ -37,7 +37,7 @@ export async function vendorRoutes(fastify: FastifyInstance) {
         const fullVendor = await db.query.vendor.findFirst({
           where: eq(vendor.id, v.vendor.id),
           with: {
-            user: { columns: { name: true, image: true } },
+            user: { columns: { name: true, image: true, email: true, phone: true } },
             menuItems: { where: eq(menuItem.isAvailable, true) },
           },
         });
@@ -57,6 +57,14 @@ export async function vendorRoutes(fastify: FastifyInstance) {
       const vendorData = await db.query.vendor.findFirst({
         where: eq(vendor.userId, session.user.id),
         with: {
+          user: {
+            columns: {
+              name: true,
+              image: true,
+              email: true,
+              phone: true,
+            }
+          },
           menuItems: true,
         },
       });
@@ -87,6 +95,8 @@ export async function vendorRoutes(fastify: FastifyInstance) {
           columns: {
             name: true,
             image: true,
+            email: true,
+            phone: true,
           }
         },
         menuItems: {
