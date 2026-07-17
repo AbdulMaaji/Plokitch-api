@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/index.js";
-import { vendor, menuItem, order } from "../db/schema.js";
+import { vendor, menuItem, order, review } from "../db/schema.js";
 import { eq, or, sql, count } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
 
@@ -128,6 +128,157 @@ export async function vendorRoutes(fastify: FastifyInstance) {
       } 
     });
   });
+
+  // GET /api/vendors/:id/reviews — get reviews for a vendor (public)
+  fastify.get("/api/vendors/:id/reviews", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    let vendorId = id;
+
+    if (!isUuid) {
+      const v = await db.query.vendor.findFirst({
+        where: eq(vendor.slug, id),
+        columns: { id: true },
+      });
+      if (!v) {
+        return reply.status(404).send({ success: false, error: "Kitchen not found" });
+      }
+      vendorId = v.id;
+    }
+
+    const reviewsData = await db.query.review.findMany({
+      where: eq(review.vendorId, vendorId),
+      with: {
+        customer: {
+          columns: {
+            name: true,
+            image: true,
+          },
+        },
+      },
+      orderBy: (r, { desc }) => [desc(r.createdAt)],
+    });
+
+    return reply.send({ success: true, data: reviewsData });
+  });
+
+  // POST /api/vendors/:id/reviews — create a review (authenticated)
+  fastify.post(
+    "/api/vendors/:id/reviews",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const session = (request as any).session;
+      const { id } = request.params as { id: string };
+      const body = request.body as {
+        rating: number;
+        comment?: string;
+        orderId?: string;
+      };
+
+      if (!body.rating || body.rating < 1 || body.rating > 5) {
+        return reply.status(400).send({ success: false, error: "Rating must be between 1 and 5" });
+      }
+
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      let vendorId = id;
+
+      if (!isUuid) {
+        const v = await db.query.vendor.findFirst({
+          where: eq(vendor.slug, id),
+          columns: { id: true },
+        });
+        if (!v) {
+          return reply.status(404).send({ success: false, error: "Kitchen not found" });
+        }
+        vendorId = v.id;
+      }
+
+      const [newReview] = await db
+        .insert(review)
+        .values({
+          customerId: session.user.id,
+          vendorId,
+          orderId: body.orderId || null,
+          rating: body.rating,
+          comment: body.comment,
+        })
+        .returning();
+
+      // Recalculate average rating for vendor
+      const allReviews = await db
+        .select({ rating: review.rating })
+        .from(review)
+        .where(eq(review.vendorId, vendorId));
+
+      if (allReviews.length > 0) {
+        const total = allReviews.reduce((sum, r) => sum + r.rating, 0);
+        const avg = total / allReviews.length;
+        await db
+          .update(vendor)
+          .set({ rating: avg.toFixed(2) })
+          .where(eq(vendor.id, vendorId));
+      }
+
+      return reply.status(201).send({ success: true, data: newReview });
+    }
+  );
+
+  // PUT /api/vendors/reviews/:reviewId — update a review (authenticated)
+  fastify.put(
+    "/api/vendors/reviews/:reviewId",
+    { preHandler: [requireAuth] },
+    async (request, reply) => {
+      const session = (request as any).session;
+      const { reviewId } = request.params as { reviewId: string };
+      const body = request.body as {
+        rating: number;
+        comment?: string;
+      };
+
+      if (!body.rating || body.rating < 1 || body.rating > 5) {
+        return reply.status(400).send({ success: false, error: "Rating must be between 1 and 5" });
+      }
+
+      const existingReview = await db.query.review.findFirst({
+        where: eq(review.id, reviewId),
+      });
+
+      if (!existingReview) {
+        return reply.status(404).send({ success: false, error: "Review not found" });
+      }
+
+      if (existingReview.customerId !== session.user.id) {
+        return reply.status(403).send({ success: false, error: "You can only edit your own reviews" });
+      }
+
+      const [updatedReview] = await db
+        .update(review)
+        .set({
+          rating: body.rating,
+          comment: body.comment,
+        })
+        .where(eq(review.id, reviewId))
+        .returning();
+
+      // Recalculate average rating for vendor
+      const vendorId = existingReview.vendorId;
+      const allReviews = await db
+        .select({ rating: review.rating })
+        .from(review)
+        .where(eq(review.vendorId, vendorId));
+
+      if (allReviews.length > 0) {
+        const total = allReviews.reduce((sum, r) => sum + r.rating, 0);
+        const avg = total / allReviews.length;
+        await db
+          .update(vendor)
+          .set({ rating: avg.toFixed(2) })
+          .where(eq(vendor.id, vendorId));
+      }
+
+      return reply.send({ success: true, data: updatedReview });
+    }
+  );
 
   // POST /api/vendors — create vendor profile (chef role)
   fastify.post(

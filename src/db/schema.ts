@@ -326,7 +326,6 @@ export const review = pgTable("review", {
     .notNull()
     .references(() => vendor.id),
   orderId: uuid("order_id")
-    .notNull()
     .references(() => order.id),
   rating: integer("rating").notNull(),
   comment: text("comment"),
