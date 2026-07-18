@@ -236,7 +236,7 @@ export async function vendorRoutes(fastify: FastifyInstance) {
           type: 'new_review',
           title: 'New Review',
           body: `${customerName} left a ${body.rating}-star review`,
-          data: { rating: body.rating, comment: body.comment },
+          data: { rating: body.rating, comment: body.comment, vendorId },
         });
 
         if (vendorData.user.email) {
