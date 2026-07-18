@@ -3,6 +3,8 @@ import { db } from "../db/index.js";
 import { vendor, menuItem, order, review } from "../db/schema.js";
 import { eq, or, sql, count } from "drizzle-orm";
 import { requireAuth, requireRole } from "../middleware/auth.middleware.js";
+import { notifyUser } from "../lib/notifications.js";
+import { sendNewReviewVendorEmail } from "../lib/email.js";
 
 /**
  * Vendor (Kitchen) routes — /api/vendors
@@ -217,6 +219,35 @@ export async function vendorRoutes(fastify: FastifyInstance) {
           .update(vendor)
           .set({ rating: avg.toFixed(2) })
           .where(eq(vendor.id, vendorId));
+      }
+
+      const vendorData = await db.query.vendor.findFirst({
+        where: eq(vendor.id, vendorId),
+        with: {
+          user: { columns: { id: true, name: true, email: true } },
+        },
+      });
+
+      if (vendorData?.user) {
+        const customerName = (session.user as any).name || 'A customer';
+
+        await notifyUser({
+          userId: vendorData.user.id,
+          type: 'new_review',
+          title: 'New Review',
+          body: `${customerName} left a ${body.rating}-star review`,
+          data: { rating: body.rating, comment: body.comment },
+        });
+
+        if (vendorData.user.email) {
+          await sendNewReviewVendorEmail({
+            vendorEmail: vendorData.user.email,
+            vendorName: vendorData.businessName,
+            customerName: customerName,
+            rating: body.rating,
+            comment: body.comment || '',
+          });
+        }
       }
 
       return reply.status(201).send({ success: true, data: newReview });

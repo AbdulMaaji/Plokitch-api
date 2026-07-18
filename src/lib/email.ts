@@ -448,6 +448,43 @@ export async function sendNewOrderVendorEmail({
   return dispatchEmail({ to: vendorEmail, subject: `New order received — ${order.id}`, html, context: "vendor-new-order" });
 }
 
+export async function sendNewReviewVendorEmail({
+  vendorEmail,
+  vendorName,
+  customerName,
+  rating,
+  comment,
+}: {
+  vendorEmail: string;
+  vendorName: string;
+  customerName: string;
+  rating: number;
+  comment: string;
+}) {
+  const stars = '★'.repeat(rating) + '☆'.repeat(5 - rating);
+  const html = renderShell({
+    title: "New Review Received",
+    heading: "New Review Received",
+    intro: `Hi ${vendorName},`,
+    highlights: [
+      { label: "Customer", value: customerName },
+      { label: "Rating", value: `${rating}/5 ${stars}` },
+    ],
+    bodyParagraphs: [
+      ...(comment ? [`"${comment}"`] : []),
+      "Reviews help build trust with the Plokitch community. Keep up the great work!",
+    ],
+    footerNote: "This is an automated notification from Plokitch.",
+  });
+
+  return dispatchEmail({
+    to: vendorEmail,
+    subject: `New ${rating}-star review from ${customerName}`,
+    html,
+    context: "new-review-vendor",
+  });
+}
+
 export async function sendOrderPreparingEmail({
   order,
   customerName,

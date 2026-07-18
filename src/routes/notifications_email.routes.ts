@@ -3,6 +3,7 @@ import {
   sendWelcomeEmail,
   sendOrderReceiptEmail,
   sendNewOrderVendorEmail,
+  sendNewReviewVendorEmail,
   sendOrderDeliveringEmail,
   sendOrderCompletedEmail,
   sendOrderCancelledEmail,
@@ -14,7 +15,7 @@ import {
  *
  * Body shape:
  * {
- *   action: "welcome" | "order_receipt" | "new_order_vendor" | "order_delivering" | "order_completed" | "order_cancelled",
+ *   action: "welcome" | "order_receipt" | "new_order_vendor" | "new_review_vendor" | "order_delivering" | "order_completed" | "order_cancelled",
  *   payload: { ... }
  * }
  */
@@ -83,6 +84,17 @@ export async function notificationEmailRoutes(fastify: FastifyInstance) {
             customerEmail: payload.customerEmail,
             riderName: payload.riderName,
             riderEmail: payload.riderEmail,
+          });
+          break;
+
+        case "new_review_vendor":
+          // payload: { vendorName, vendorEmail, customerName, rating, comment }
+          await sendNewReviewVendorEmail({
+            vendorEmail: payload.vendorEmail,
+            vendorName: payload.vendorName,
+            customerName: payload.customerName,
+            rating: payload.rating,
+            comment: payload.comment,
           });
           break;
 
